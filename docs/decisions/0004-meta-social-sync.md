@@ -35,3 +35,12 @@ M2 착수 순서(`docs/decisions/0003` 이전, `golden-tree-design.md` M2~M3 착
   (마이그레이션 0003) — 목표를 못 찾으면 0으로 대체
 - Discord `/ask` 봇의 허용 analysis에 `social_posts`, `social_campaigns`, `social_ads`, `social_comments` 추가 — 이제 소셜 성과도 물어볼 수 있음
 - 광고 캠페인의 매장 구분은 캠페인 이름 문자열 매칭(`cozy`/`bon` 포함 여부) — `docs/decisions/0001` 항목 1에서 이미 지적한 약한 지점, 아직 안 고침. 이름에 매장명이 없는 캠페인이 생기면 재발 가능
+
+## 추가 — 포스팅↔매출 상관관계 (2026-08-24, Phase 6 일부 앞당김)
+
+오너 요청으로 `golden-tree-design.md` M2~M3 착수 순서에 "2.5"로 추가. 인과관계는 증명 불가하다는 점을 오너도 인지 — 상관관계만 보여준다.
+
+- `analytics_social_sales_correlation`(마이그레이션 0004): 포스트 발행일의 매장 순매출을 "같은 요일 최근 4주 평균"과 비교(W6 이상감지 기준 재사용). `vs_baseline_pct`로 몇 % 높았/낮았는지 표시
+- `analytics_post_item_sales_trend`(마이그레이션 0005): 특정 메뉴를 다룬 포스트를 캡션·태그로 찾아, 발행일부터 0~3일간 그 메뉴 매출 추이. 한글 메뉴명("마차라떼")은 캡션이 영어라 안 잡힐 수 있어 라우터가 영어로 변환해서 검색하도록 안내함
+- `analytics_modifier_sales`(마이그레이션 0006): 오트밀크 등 modifier(옵션) 단위 조회 — `order_items.raw->'modifiers'`에 이미 있던 데이터를 활용. item_name과 별개 축이라 새 함수 필요했음
+- Discord 답변 생성 프롬프트에 "상관관계일 뿐 인과관계 아님"을 항상 덧붙이도록 지시 추가

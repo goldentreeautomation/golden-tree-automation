@@ -31,12 +31,15 @@ const ALLOWED_ANALYSIS = [
   "location_sales",
   "top_items",
   "item_sales",
+  "modifier_sales",
   "hourly_sales",
   "daily_sales",
   "monthly_sales",
   "category_sales",
   "comparison",
   "customer_retention",
+  "social_sales_correlation",
+  "post_item_trend",
   "social_posts",
   "social_campaigns",
   "social_ads",
@@ -108,13 +111,16 @@ analysis 값은 반드시 다음 중 하나: ${ALLOWED_ANALYSIS.join(", ")}
 - sales_summary: 특정 기간 매출 요약 (순매출, 주문수, 객단가)
 - location_sales: 두 매장 비교
 - top_items: 잘 팔린 품목 순위 (item_name 필요없음, limit로 개수 조절)
-- item_sales: 특정 품목 하나의 판매 현황 (item_name 필수)
+- item_sales: 특정 품목 하나의 판매 현황 (item_name 필수, 메뉴명은 영어로 변환해서 넣어라)
+- modifier_sales: 오트밀크·아몬드밀크 등 옵션(modifier) 단위 주문 건수·수량·매출 (item_name에 옵션명, 영어로. 예: "Oat Milk")
 - hourly_sales: 시간대별 매출
 - daily_sales: 일자별 매출
 - monthly_sales: 월별 매출 (역대 최고/최저 달, 월별 추이 질문에 사용. "지금까지"/"역대"는 start_date를 2025-01-01로)
 - category_sales: 카테고리별 매출 비중
 - comparison: 두 기간 비교 (compare_start, compare_end 필수)
 - customer_retention: 신규/재방문 고객 비율
+- social_sales_correlation: 인스타 포스트 발행일의 매장 매출이 "같은 요일 최근 4주 평균" 대비 얼마나 높았/낮았는지 (인과관계 아님, 상관관계만). "포스팅하면 매출 늘어?" 류 질문에 사용
+- post_item_trend: 특정 메뉴를 다룬 포스트 발행 후 0~3일간 그 메뉴 매출 추이 (item_name 필수, 영어 메뉴명. "라떼 포스트 올리고 라떼 잘 팔렸어?" 류 질문)
 - social_posts: 인스타그램 포스트별 좋아요·댓글·공유·저장·도달 (limit로 개수 조절, item_name에 검색어 넣으면 캡션/태그 검색)
 - social_campaigns: 광고 캠페인 요약 (기간별 지출 대비 성과)
 - social_ads: 광고 캠페인별 일 단위 성과 (지출, 노출, 클릭, CTR·CPC)
@@ -141,7 +147,9 @@ JSON 스키마:
 function answerSystemPrompt(): string {
   return `너는 82 Bakeshop 매장 데이터를 설명하는 어시스턴트다. 아래에 주어지는 JSON 데이터에 있는
 숫자만 사용해서 한국어로 짧고 명확하게 답해라. 데이터에 없는 숫자를 지어내지 마라.
-금액은 CAD 달러 기준이고 이미 세금·팁이 제외된 Net Sales다. 존댓말을 쓰되 간결하게. 이모지 쓰지 마라.`;
+금액은 CAD 달러 기준이고 이미 세금·팁이 제외된 Net Sales다. 존댓말을 쓰되 간결하게. 이모지 쓰지 마라.
+vs_baseline_pct나 포스트-매출 관련 데이터를 설명할 땐 반드시 "상관관계일 뿐 그 포스트 때문이라고
+단정할 수 없다"는 취지를 짧게 덧붙여라 — 다른 요인(요일, 날씨, 프로모션 등)일 수도 있다.`;
 }
 
 async function rpc(fn: string, args: Record<string, unknown>): Promise<any> {
