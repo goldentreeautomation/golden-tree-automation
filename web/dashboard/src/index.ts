@@ -1,0 +1,294 @@
+// Golden Tree — 대시보드 첫 페이지 (M1 #8)
+// 정적 HTML을 그대로 서빙한다. 데이터는 브라우저가 dashboard-api를 fetch해서 채운다.
+// 디자인 토큰: awesome-design-md/design-md/mongodb/DESIGN.md 기반 (색상·타이포·카드 형태),
+// 실제 폰트는 라이선스 문제로 시스템 폰트 폴백만 사용.
+
+const HTML = `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Golden Tree — 매출 대시보드</title>
+<style>
+  :root {
+    --ink: #001e2b;
+    --steel: #5c6c7a;
+    --stone: #7c8c9a;
+    --muted: #a8b3bc;
+    --canvas: #ffffff;
+    --surface: #f9fbfa;
+    --hairline: #e1e5e8;
+    --hairline-soft: #eceff1;
+    --brand-green: #00ed64;
+    --brand-green-dark: #00684a;
+    --brand-green-soft: #c3f0d2;
+    --brand-teal-deep: #001e2b;
+    --negative: #d6455b;
+    --negative-soft: #fbe3e7;
+    --radius-lg: 12px;
+    --radius-md: 8px;
+    --radius-full: 9999px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 40px;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--canvas);
+    border-bottom: 1px solid var(--hairline);
+    padding: 14px 16px 12px;
+  }
+  .brand {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--stone);
+    letter-spacing: 0.3px;
+    margin-bottom: 8px;
+  }
+  .week-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .week-nav button {
+    border: 1px solid var(--hairline);
+    background: var(--canvas);
+    color: var(--ink);
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .week-nav button:disabled { color: var(--muted); }
+  .week-label {
+    text-align: center;
+    flex: 1;
+  }
+  .week-label .range {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .week-label .tag {
+    font-size: 12px;
+    color: var(--stone);
+    margin-top: 2px;
+  }
+  main {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .loading, .error {
+    text-align: center;
+    color: var(--steel);
+    padding: 40px 16px;
+    font-size: 14px;
+  }
+  .error { color: var(--negative); }
+  .card {
+    background: var(--canvas);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+  }
+  .loc-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--stone);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .net-sales-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .net-sales {
+    font-size: 34px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: var(--radius-full);
+  }
+  .badge.up { background: var(--brand-green-soft); color: var(--brand-green-dark); }
+  .badge.down { background: var(--negative-soft); color: var(--negative); }
+  .badge.flat { background: var(--hairline-soft); color: var(--steel); }
+  .sub-label { font-size: 12px; color: var(--stone); margin-top: 2px; }
+  .stat-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .stat {
+    flex: 1;
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+  }
+  .stat .label { font-size: 11px; color: var(--stone); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+  .stat .value { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  .chart {
+    margin-top: 16px;
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    height: 64px;
+  }
+  .chart .bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+  }
+  .chart .bar {
+    width: 100%;
+    max-width: 28px;
+    background: var(--brand-green);
+    border-radius: 4px 4px 0 0;
+    min-height: 2px;
+  }
+  .chart .bar.today { background: var(--brand-teal-deep); }
+  .chart .day-label { font-size: 10px; color: var(--stone); margin-top: 4px; }
+  footer {
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    padding: 16px;
+  }
+  @media (min-width: 640px) {
+    .locations { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    main { padding: 24px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">82 Bakeshop — Net Sales</div>
+  <div class="week-nav">
+    <button id="prevWeek" aria-label="이전 주">&#8249;</button>
+    <div class="week-label">
+      <div class="range" id="weekRange">불러오는 중...</div>
+      <div class="tag" id="weekTag"></div>
+    </div>
+    <button id="nextWeek" aria-label="다음 주">&#8250;</button>
+  </div>
+</header>
+<main>
+  <div id="content" class="loading">불러오는 중...</div>
+</main>
+<footer>매출 = Net Sales(총매출−할인), 세금·팁 제외 · 데이터는 매일 자동 갱신됩니다</footer>
+
+<script>
+const API = window.location.origin + '/functions/v1/dashboard-api';
+let weekOffset = 0;
+let loading = false;
+
+function fmtMoney(n) {
+  return '$' + Number(n).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtDateRange(start, end) {
+  const s = new Date(start + 'T00:00:00');
+  const e = new Date(end + 'T00:00:00');
+  const opt = { month: 'short', day: 'numeric' };
+  return s.toLocaleDateString('en-CA', opt) + ' – ' + e.toLocaleDateString('en-CA', opt);
+}
+function dayLabel(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return ['일','월','화','수','목','금','토'][d.getDay()];
+}
+function badgeHtml(pct) {
+  if (pct === null || pct === undefined) return '<span class="badge flat">신규</span>';
+  const dir = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+  const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '–';
+  return '<span class="badge ' + dir + '">' + arrow + ' ' + Math.abs(pct) + '%</span>';
+}
+function renderChart(daily) {
+  if (!daily || daily.length === 0) return '';
+  const max = Math.max(...daily.map(d => d.net_sales), 1);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  return '<div class="chart">' + daily.map(d => {
+    const h = Math.max(2, Math.round((d.net_sales / max) * 64));
+    const isToday = d.business_date === todayStr;
+    return '<div class="bar-col"><div class="bar' + (isToday ? ' today' : '') + '" style="height:' + h + 'px" title="' + d.business_date + ': ' + fmtMoney(d.net_sales) + '"></div><div class="day-label">' + dayLabel(d.business_date) + '</div></div>';
+  }).join('') + '</div>';
+}
+function renderLocation(loc) {
+  return '<div class="card">' +
+    '<div class="loc-name">' + loc.location_name + '</div>' +
+    '<div class="net-sales-row">' +
+      '<div class="net-sales">' + fmtMoney(loc.net_sales) + '</div>' +
+      badgeHtml(loc.compare.net_sales_change_pct) +
+    '</div>' +
+    '<div class="sub-label">지난주 같은 기간 ' + fmtMoney(loc.compare.net_sales) + '</div>' +
+    '<div class="stat-row">' +
+      '<div class="stat"><div class="label">결제건수</div><div class="value">' + loc.order_count.toLocaleString() + '건</div></div>' +
+      '<div class="stat"><div class="label">평균단가</div><div class="value">' + fmtMoney(loc.average_order_value) + '</div></div>' +
+    '</div>' +
+    renderChart(loc.daily) +
+  '</div>';
+}
+
+async function load() {
+  if (loading) return;
+  loading = true;
+  document.getElementById('prevWeek').disabled = true;
+  document.getElementById('nextWeek').disabled = true;
+  const content = document.getElementById('content');
+  content.className = 'loading';
+  content.textContent = '불러오는 중...';
+  try {
+    const res = await fetch(API + '?week_offset=' + weekOffset);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    document.getElementById('weekRange').textContent = fmtDateRange(data.week_start, data.week_end);
+    document.getElementById('weekTag').textContent = data.is_current_week ? '이번 주 (진행 중)' : '';
+
+    content.className = 'locations';
+    content.innerHTML = data.locations.map(renderLocation).join('');
+  } catch (err) {
+    content.className = 'error';
+    content.textContent = '불러오지 못했습니다: ' + err.message;
+  } finally {
+    loading = false;
+    document.getElementById('prevWeek').disabled = false;
+    document.getElementById('nextWeek').disabled = weekOffset >= 0;
+  }
+}
+
+document.getElementById('prevWeek').addEventListener('click', () => { weekOffset -= 1; load(); });
+document.getElementById('nextWeek').addEventListener('click', () => { if (weekOffset < 0) { weekOffset += 1; load(); } });
+
+load();
+</script>
+</body>
+</html>`;
+
+Deno.serve(() => new Response(HTML, { headers: { "content-type": "text/html; charset=utf-8" } }));

@@ -1,0 +1,20 @@
+.env
+.env.*
+!.env.example
+
+node_modules/
+.next/
+dist/
+build/
+
+output/verification/*
+output/pending/**/*
+output/approved/*
+output/*.jsonl
+!output/**/.gitkeep
+
+.DS_Store
+.vscode/
+
+# getdesign 참고 자료 — 외부 도구가 관리하는 별도 클론(자체 .git 포함), 프로젝트 코드 아님
+awesome-design-md/
