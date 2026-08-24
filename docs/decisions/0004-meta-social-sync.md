@@ -22,6 +22,16 @@ M2 착수 순서(`docs/decisions/0003` 이전, `golden-tree-design.md` M2~M3 착
 ## 결과 (사후 기록)
 
 - 첫 배포 때 캠페인 테이블에 `platform` 값을 `meta_ads`로 새로 만들어서 레거시 값(`meta`)과 어긋나 69건이 중복 생성됨 — 즉시 발견해 코드 수정 + 중복 데이터 삭제(해당 배포에서 생긴 것만, 기존 데이터는 미접촉). **교훈: 기존 스키마 재사용 시 `platform` 등 키로 쓰이는 문자열 값도 레거시와 정확히 일치시켜야 한다**
-- 30일 백필 완료: 포스트 22건, 댓글 70건, 광고 지표 32건
+- 30일 백필 → 오너 요청으로 전체 기간(2025-03-05~) 백필로 확장. 게시물이 많아(272건) 순차 처리로는
+  Edge Function 유휴 타임아웃(150초)에 걸림 — 계정 내 게시물 동시 처리(동시 8개) + 배치마다 즉시
+  저장으로 수정 후 성공. 전체 백필 결과: 포스트 272건(Bon Sushi 89 + CozyHaus 183), 댓글 605건,
+  광고 지표 342건, 캠페인 69건
+- 전체 백필 중 `social_ad_metrics`에 FK(campaign_id → social_ad_campaigns) 위반 발견 — Meta
+  `/campaigns` 목록 API가 이유 불명으로 캠페인 3개(ARCHIVED 추정)를 안 돌려줘서, 그 캠페인들의
+  광고 지표를 못 넣음. 알려진 캠페인 것만 넣고 나머지는 스킵하도록 처리(`skipped_campaign_ids`로
+  응답에 남김) — 이 3개 캠페인의 과거 지출 데이터는 현재 못 가져옴
+- 같은 배포에서 레거시 트리거(`upsert_social_ad_metric_from_view`)가 목표(objective)를 못 찾으면
+  `results`가 NULL이 되어 NOT NULL 제약 위반으로 배치 전체가 롤백되는 버그 발견·수정
+  (마이그레이션 0003) — 목표를 못 찾으면 0으로 대체
 - Discord `/ask` 봇의 허용 analysis에 `social_posts`, `social_campaigns`, `social_ads`, `social_comments` 추가 — 이제 소셜 성과도 물어볼 수 있음
 - 광고 캠페인의 매장 구분은 캠페인 이름 문자열 매칭(`cozy`/`bon` 포함 여부) — `docs/decisions/0001` 항목 1에서 이미 지적한 약한 지점, 아직 안 고침. 이름에 매장명이 없는 캠페인이 생기면 재발 가능

@@ -105,12 +105,32 @@ async function syncAccountPosts(acc: typeof ACCOUNTS[number], sinceIso: string) 
 
   const capturedDate = new Date().toISOString().slice(0, 10);
   const capturedAt = new Date().toISOString();
-  const postRows: any[] = [];
-  const metricRows: any[] = [];
-  const commentRows: any[] = [];
 
-  for (const m of media) {
-    postRows.push({
+  // Edge Function 유휴 타임아웃(150초) 대응 — 게시물이 많으면(전체 백필 등) 순차 처리로는
+  // 못 끝낸다. 동시에 여러 게시물을 처리하고, 배치마다 바로 저장해서 중간에 끊겨도 그때까지는
+  // 남는다 (idempotent라 재실행하면 이어서 채워진다).
+  const CONCURRENCY = 8;
+  let totalPosts = 0;
+  let totalComments = 0;
+
+  for (let i = 0; i < media.length; i += CONCURRENCY) {
+    const batch = media.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async (m: any) => {
+        const insights = await fetchPostInsights(m.id, m.media_product_type ?? "");
+        let comments: any[] = [];
+        try {
+          comments = await graphGetPaginated(`${m.id}/comments`, {
+            fields: "id,text,timestamp,like_count,replies.summary(true)",
+          }, 5);
+        } catch (err) {
+          console.error(`comments failed for ${m.id}:`, err);
+        }
+        return { m, insights, comments };
+      }),
+    );
+
+    const postRows = results.map(({ m }) => ({
       platform: acc.platform,
       post_id: m.id,
       account_id: acc.igId,
@@ -123,10 +143,8 @@ async function syncAccountPosts(acc: typeof ACCOUNTS[number], sinceIso: string) 
       category_tags: [],
       raw_data: m,
       updated_at: capturedAt,
-    });
-
-    const insights = await fetchPostInsights(m.id, m.media_product_type ?? "");
-    metricRows.push({
+    }));
+    const metricRows = results.map(({ m, insights }) => ({
       platform: acc.platform,
       post_id: m.id,
       captured_date: capturedDate,
@@ -141,38 +159,32 @@ async function syncAccountPosts(acc: typeof ACCOUNTS[number], sinceIso: string) 
       total_interactions: insights.total_interactions ?? 0,
       raw_data: insights,
       captured_at: capturedAt,
-    });
+    }));
+    const commentRows = results.flatMap(({ m, comments }) =>
+      comments.map((c: any) => ({
+        platform: acc.platform,
+        comment_id: c.id,
+        post_id: m.id,
+        account_id: acc.igId,
+        message: c.text ?? null,
+        sentiment: null,
+        topic_summary: null,
+        created_at: c.timestamp,
+        like_count: c.like_count ?? 0,
+        reply_count: c.replies?.summary?.total_count ?? 0,
+        raw_data: c,
+        updated_at: capturedAt,
+      }))
+    );
 
-    try {
-      const comments = await graphGetPaginated(`${m.id}/comments`, {
-        fields: "id,text,timestamp,like_count,replies.summary(true)",
-      }, 5);
-      for (const c of comments) {
-        commentRows.push({
-          platform: acc.platform,
-          comment_id: c.id,
-          post_id: m.id,
-          account_id: acc.igId,
-          message: c.text ?? null,
-          sentiment: null,
-          topic_summary: null,
-          created_at: c.timestamp,
-          like_count: c.like_count ?? 0,
-          reply_count: c.replies?.summary?.total_count ?? 0,
-          raw_data: c,
-          updated_at: capturedAt,
-        });
-      }
-    } catch (err) {
-      console.error(`comments failed for ${m.id}:`, err);
-    }
+    await ingest("social_posts_ingest", postRows);
+    await ingest("social_post_metrics_ingest", metricRows);
+    await ingest("social_comments_ingest", commentRows);
+    totalPosts += postRows.length;
+    totalComments += commentRows.length;
   }
 
-  await ingest("social_posts_ingest", postRows);
-  await ingest("social_post_metrics_ingest", metricRows);
-  await ingest("social_comments_ingest", commentRows);
-
-  return { posts: postRows.length, comments: commentRows.length };
+  return { posts: totalPosts, comments: totalComments };
 }
 
 async function syncAds(startDate: string, endDate: string) {
@@ -202,26 +214,38 @@ async function syncAds(startDate: string, endDate: string) {
     limit: "200",
   });
   const capturedAt = new Date().toISOString();
-  const metricRows = insights.map((row: any) => ({
-    platform: "meta", // 레거시 데이터와 동일한 값으로 맞춤 (platform+campaign_id가 키)
-    campaign_id: row.campaign_id,
-    metric_date: row.date_start,
-    spend: parseFloat(row.spend ?? "0"),
-    impressions: parseInt(row.impressions ?? "0", 10),
-    reach: parseInt(row.reach ?? "0", 10),
-    clicks: parseInt(row.clicks ?? "0", 10),
-    link_clicks: parseInt(row.inline_link_clicks ?? "0", 10),
-    conversions: 0,
-    purchase_value: 0,
-    ctr: parseFloat(row.ctr ?? "0"),
-    cpc: parseFloat(row.cpc ?? "0"),
-    cpm: parseFloat(row.cpm ?? "0"),
-    raw_data: row,
-    captured_at: capturedAt,
-  }));
+  // social_ad_metrics는 social_ad_campaigns(platform,campaign_id)를 참조하는 FK가 있다.
+  // Meta의 /campaigns 목록에 왜인지 안 잡히는 캠페인(ARCHIVED 등, 원인 미상)이 있으면
+  // 그 캠페인의 지표는 FK 위반으로 전체 배치가 막힌다 — 알려진 캠페인 것만 남기고 스킵.
+  const knownCampaignIds = new Set(campaignRows.map((c: any) => c.campaign_id));
+  const skipped: string[] = [];
+  const metricRows = insights
+    .filter((row: any) => {
+      const known = knownCampaignIds.has(row.campaign_id);
+      if (!known) skipped.push(row.campaign_id);
+      return known;
+    })
+    .map((row: any) => ({
+      platform: "meta", // 레거시 데이터와 동일한 값으로 맞춤 (platform+campaign_id가 키)
+      campaign_id: row.campaign_id,
+      metric_date: row.date_start,
+      spend: parseFloat(row.spend ?? "0"),
+      impressions: parseInt(row.impressions ?? "0", 10),
+      reach: parseInt(row.reach ?? "0", 10),
+      clicks: parseInt(row.clicks ?? "0", 10),
+      link_clicks: parseInt(row.inline_link_clicks ?? "0", 10),
+      conversions: 0,
+      purchase_value: 0,
+      ctr: parseFloat(row.ctr ?? "0"),
+      cpc: parseFloat(row.cpc ?? "0"),
+      cpm: parseFloat(row.cpm ?? "0"),
+      raw_data: row,
+      captured_at: capturedAt,
+    }));
   await ingest("social_ad_metrics_ingest", metricRows);
+  if (skipped.length > 0) console.error("skipped ad metric rows, campaign not found:", [...new Set(skipped)]);
 
-  return { campaigns: campaignRows.length, ad_metric_rows: metricRows.length };
+  return { campaigns: campaignRows.length, ad_metric_rows: metricRows.length, skipped_campaign_ids: [...new Set(skipped)] };
 }
 
 async function upsertSyncLog(syncKey: string, status: string, rowCount: number, errorMessage: string | null) {
@@ -265,11 +289,11 @@ Deno.serve(async (req) => {
   const adEnd = (body.until ?? now.toISOString()).slice(0, 10);
 
   try {
-    const postResults: Record<string, any> = {};
-    for (const acc of ACCOUNTS) {
-      postResults[acc.businessName] = await syncAccountPosts(acc, since);
-    }
-    const adResult = await syncAds(adStart, adEnd);
+    const [postResultPairs, adResult] = await Promise.all([
+      Promise.all(ACCOUNTS.map(async (acc) => [acc.businessName, await syncAccountPosts(acc, since)] as const)),
+      syncAds(adStart, adEnd),
+    ]);
+    const postResults = Object.fromEntries(postResultPairs);
 
     await upsertSyncLog("meta_posts", "success", Object.values(postResults).reduce((s: number, r: any) => s + r.posts, 0), null);
     await upsertSyncLog("meta_ads", "success", adResult.ad_metric_rows, null);
