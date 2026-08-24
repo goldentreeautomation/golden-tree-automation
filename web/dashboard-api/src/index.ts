@@ -125,6 +125,24 @@ function groupCategorySales(locationId: string, rows: { category_name: string; n
     .sort((a, b) => b.net_sales - a.net_sales);
 }
 
+function groupTopItemsByName(rows: { item_name: string; quantity: number; net_sales: number; order_count: number }[]) {
+  const byName = new Map<string, { item_name: string; quantity: number; net_sales: number; order_count: number }>();
+  for (const r of rows) {
+    const existing = byName.get(r.item_name);
+    if (existing) {
+      existing.quantity += r.quantity;
+      existing.net_sales += r.net_sales;
+      existing.order_count += r.order_count;
+    } else {
+      byName.set(r.item_name, { item_name: r.item_name, quantity: r.quantity, net_sales: r.net_sales, order_count: r.order_count });
+    }
+  }
+  return [...byName.values()]
+    .map((r) => ({ ...r, net_sales: Math.round(r.net_sales * 100) / 100 }))
+    .sort((a, b) => b.net_sales - a.net_sales)
+    .slice(0, 5);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
 
@@ -168,15 +186,18 @@ Deno.serve(async (req) => {
     );
     const categoryMap = Object.fromEntries(categoryByLocation);
 
+    // analytics_top_items는 (품목, 맛/옵션) 단위로 나온다 — 대시보드는 맛 구분 없이 품목
+    // 전체 합계로 보여달라는 요청(2026-08-24)이 있어 여기서만 품목명으로 재집계한다.
+    // Query Contract 함수 자체는 안 바꾼다 — 다른 곳(디스코드 등)은 맛별 구분이 필요할 수 있음.
     const topItemsByLocation = await Promise.all(
       LOCATIONS.map((loc) =>
         rpc("analytics_top_items", {
           p_start_date: cur.start,
           p_end_date: cur.end,
-          p_limit: 5,
+          p_limit: 50,
           p_location_id: loc.id,
           p_sort_by: "net_sales",
-        }).then((rows: any[]) => [loc.id, rows] as const)
+        }).then((rows: any[]) => [loc.id, groupTopItemsByName(rows)] as const)
       ),
     );
     const topItemsMap = Object.fromEntries(topItemsByLocation);
