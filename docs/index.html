@@ -159,7 +159,7 @@
   .daily-row .bar-fill { height: 100%; background: var(--brand-green); border-radius: 4px; }
   .daily-row.today .bar-fill { background: var(--brand-teal-deep); }
   @media (prefers-color-scheme: dark) { .daily-row.today .bar-fill { background: var(--muted); } }
-  .daily-row .amt { width: 72px; text-align: right; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+  .daily-row .amt { width: 88px; text-align: right; font-size: 12px; font-weight: 600; flex-shrink: 0; }
 
   .top-items { display: flex; flex-direction: column; gap: 6px; }
   .top-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
@@ -213,11 +213,6 @@ let loading = false;
 function fmtMoney(n) {
   return '$' + Number(n).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function fmtMoneyShort(n) {
-  n = Number(n);
-  if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k';
-  return '$' + Math.round(n);
-}
 function fmtDateRange(start, end) {
   const s = new Date(start + 'T00:00:00');
   const e = new Date(end + 'T00:00:00');
@@ -246,7 +241,7 @@ function renderDaily(daily) {
     return '<div class="daily-row' + (isToday ? ' today' : '') + '">' +
       '<div class="day">' + dayLabel(d.business_date) + '</div>' +
       '<div class="bar-track"><div class="bar-fill" style="width:' + w + '%"></div></div>' +
-      '<div class="amt">' + fmtMoneyShort(d.net_sales) + '</div>' +
+      '<div class="amt">' + fmtMoney(d.net_sales) + '</div>' +
     '</div>';
   }).join('');
   return '<div class="section-title">일별 순매출</div><div class="daily-table">' + rows + '</div>';
