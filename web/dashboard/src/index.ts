@@ -205,7 +205,7 @@ const HTML = `<!doctype html>
 <footer>매출 = Net Sales(총매출−할인), 세금·팁 제외 · 데이터는 매일 자동 갱신됩니다</footer>
 
 <script>
-const API = window.location.origin + '/functions/v1/dashboard-api';
+const API = 'https://stfiazhmznssyfsiaxvw.supabase.co/functions/v1/dashboard-api';
 let weekOffset = 0;
 let loading = false;
 
