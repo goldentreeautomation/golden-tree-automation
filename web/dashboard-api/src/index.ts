@@ -14,6 +14,27 @@ const LOCATIONS = [
   { id: "L7DA0MBKD2X4P", name: "CozyHaus" },
 ];
 
+// 오너가 지정한 그룹 (2026-08-24 대화). Square 카테고리명은 실제 DB 조회로 확인함.
+// docs/decisions/0002-dashboard-static-html-not-nextjs.md 참조.
+const CATEGORY_GROUPS: Record<string, { name: string; categories: string[] }[]> = {
+  LWEFT8C6SXJ7J: [
+    { name: "백주방", categories: ["Dish", "Tempura"] },
+    { name: "음료", categories: ["Beverage", "Drinks", "Drink"] },
+    // 나머지 전부(Sashimi & Nigiri, Maki, Special Roll, Lunch Set, Small Bite,
+    // Party Tray Set, By The Piece, Extras 등) = 앞주방 스시 — "기타"로 합산 후 이름만 바꿔 표시
+  ],
+  L7DA0MBKD2X4P: [
+    { name: "커피류", categories: ["Coffee"] },
+    { name: "음료류", categories: ["Non Coffee"] },
+    { name: "디저트류", categories: ["Dessert/Bread", "Cake", "Dessert", "Basque Cheesecake", "Genoise Cake", "Vegan Cheesecake", "Vegan"] },
+    { name: "컵밥류", categories: ["Food"] },
+  ],
+};
+const CATCHALL_NAME: Record<string, string> = {
+  LWEFT8C6SXJ7J: "스시(앞주방)",
+  L7DA0MBKD2X4P: "기타",
+};
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -79,6 +100,31 @@ function weekRange(weekOffset: number) {
   return { start: toDateStr(start), end: toDateStr(effectiveEnd), fullWeekEnd: toDateStr(end) };
 }
 
+function groupCategorySales(locationId: string, rows: { category_name: string; net_sales: number }[]) {
+  const groups = CATEGORY_GROUPS[locationId] ?? [];
+  const totals = groups.map((g) => ({ name: g.name, net_sales: 0 }));
+  let catchall = 0;
+  let grandTotal = 0;
+  for (const row of rows) {
+    grandTotal += row.net_sales;
+    const g = groups.find((g) => g.categories.includes(row.category_name));
+    if (g) {
+      totals.find((t) => t.name === g.name)!.net_sales += row.net_sales;
+    } else {
+      catchall += row.net_sales;
+    }
+  }
+  totals.push({ name: CATCHALL_NAME[locationId] ?? "기타", net_sales: catchall });
+  return totals
+    .filter((t) => t.net_sales > 0)
+    .map((t) => ({
+      name: t.name,
+      net_sales: Math.round(t.net_sales * 100) / 100,
+      pct: grandTotal === 0 ? 0 : Math.round((t.net_sales / grandTotal) * 1000) / 10,
+    }))
+    .sort((a, b) => b.net_sales - a.net_sales);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
 
@@ -111,6 +157,30 @@ Deno.serve(async (req) => {
     );
     const dailyMap = Object.fromEntries(dailyByLocation);
 
+    const categoryByLocation = await Promise.all(
+      LOCATIONS.map((loc) =>
+        rpc("analytics_category_sales", {
+          p_start_date: cur.start,
+          p_end_date: cur.end,
+          p_location_id: loc.id,
+        }).then((rows: any[]) => [loc.id, groupCategorySales(loc.id, rows)] as const)
+      ),
+    );
+    const categoryMap = Object.fromEntries(categoryByLocation);
+
+    const topItemsByLocation = await Promise.all(
+      LOCATIONS.map((loc) =>
+        rpc("analytics_top_items", {
+          p_start_date: cur.start,
+          p_end_date: cur.end,
+          p_limit: 5,
+          p_location_id: loc.id,
+          p_sort_by: "net_sales",
+        }).then((rows: any[]) => [loc.id, rows] as const)
+      ),
+    );
+    const topItemsMap = Object.fromEntries(topItemsByLocation);
+
     const byId = (rows: any[]) => Object.fromEntries(rows.map((r: any) => [r.location_id, r]));
     const curById = byId(curSales);
     const prevById = byId(prevSales);
@@ -132,6 +202,8 @@ Deno.serve(async (req) => {
           order_count_change_pct: pct(c.order_count, p.order_count),
         },
         daily: dailyMap[loc.id] ?? [],
+        category_groups: categoryMap[loc.id] ?? [],
+        top_items: topItemsMap[loc.id] ?? [],
       };
     });
 

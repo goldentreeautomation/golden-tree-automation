@@ -1,13 +1,14 @@
 // Golden Tree — 대시보드 첫 페이지 (M1 #8)
 // 정적 HTML을 그대로 서빙한다. 데이터는 브라우저가 dashboard-api를 fetch해서 채운다.
-// 디자인 토큰: awesome-design-md/design-md/mongodb/DESIGN.md 기반 (색상·타이포·카드 형태),
-// 실제 폰트는 라이선스 문제로 시스템 폰트 폴백만 사용.
+// 디자인 토큰: awesome-design-md/design-md/mongodb/DESIGN.md 기반, 다크모드는 휴대폰 설정을
+// 그대로 따라간다(prefers-color-scheme). 실제 폰트는 라이선스 문제로 시스템 폰트 폴백만 사용.
 
 const HTML = `<!doctype html>
 <html lang="ko">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
 <title>Golden Tree — 매출 대시보드</title>
 <style>
   :root {
@@ -28,6 +29,24 @@ const HTML = `<!doctype html>
     --radius-lg: 12px;
     --radius-md: 8px;
     --radius-full: 9999px;
+    --chart-colors: #00ed64, #3d4f9f, #fa6e39, #7b3ff2, #f06bb8, #00a35c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink: #eef2f3;
+      --steel: #a8b3bc;
+      --stone: #8a97a3;
+      --muted: #5c6c7a;
+      --canvas: #10181d;
+      --surface: #182229;
+      --hairline: #2a3841;
+      --hairline-soft: #1f2a31;
+      --brand-green: #00ed64;
+      --brand-green-dark: #4ee897;
+      --brand-green-soft: #113828;
+      --negative: #ff7b8f;
+      --negative-soft: #3a1c22;
+    }
   }
   * { box-sizing: border-box; }
   body {
@@ -72,19 +91,9 @@ const HTML = `<!doctype html>
     justify-content: center;
   }
   .week-nav button:disabled { color: var(--muted); }
-  .week-label {
-    text-align: center;
-    flex: 1;
-  }
-  .week-label .range {
-    font-size: 16px;
-    font-weight: 600;
-  }
-  .week-label .tag {
-    font-size: 12px;
-    color: var(--stone);
-    margin-top: 2px;
-  }
+  .week-label { text-align: center; flex: 1; }
+  .week-label .range { font-size: 16px; font-weight: 600; }
+  .week-label .tag { font-size: 12px; color: var(--stone); margin-top: 2px; }
   main {
     padding: 16px;
     display: flex;
@@ -120,11 +129,7 @@ const HTML = `<!doctype html>
     margin-top: 6px;
     flex-wrap: wrap;
   }
-  .net-sales {
-    font-size: 34px;
-    font-weight: 600;
-    letter-spacing: -0.5px;
-  }
+  .net-sales { font-size: 34px; font-weight: 600; letter-spacing: -0.5px; }
   .badge {
     display: inline-flex;
     align-items: center;
@@ -138,49 +143,49 @@ const HTML = `<!doctype html>
   .badge.down { background: var(--negative-soft); color: var(--negative); }
   .badge.flat { background: var(--hairline-soft); color: var(--steel); }
   .sub-label { font-size: 12px; color: var(--stone); margin-top: 2px; }
-  .stat-row {
-    display: flex;
-    gap: 12px;
-    margin-top: 16px;
-  }
-  .stat {
-    flex: 1;
-    background: var(--surface);
-    border-radius: var(--radius-md);
-    padding: 10px 12px;
-  }
+  .stat-row { display: flex; gap: 12px; margin-top: 16px; }
+  .stat { flex: 1; background: var(--surface); border-radius: var(--radius-md); padding: 10px 12px; }
   .stat .label { font-size: 11px; color: var(--stone); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
   .stat .value { font-size: 18px; font-weight: 600; margin-top: 2px; }
-  .chart {
-    margin-top: 16px;
-    display: flex;
-    align-items: flex-end;
-    gap: 6px;
-    height: 64px;
+
+  .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--stone);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin: 18px 0 8px;
   }
-  .chart .bar-col {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-end;
-    height: 100%;
+
+  .daily-table { display: flex; flex-direction: column; gap: 1px; background: var(--hairline-soft); border-radius: var(--radius-md); overflow: hidden; }
+  .daily-row { display: flex; align-items: center; gap: 8px; background: var(--canvas); padding: 7px 10px; }
+  .daily-row .day { width: 48px; font-size: 12px; color: var(--stone); flex-shrink: 0; }
+  .daily-row .bar-track { flex: 1; height: 8px; background: var(--surface); border-radius: 4px; overflow: hidden; }
+  .daily-row .bar-fill { height: 100%; background: var(--brand-green); border-radius: 4px; }
+  .daily-row.today .bar-fill { background: var(--brand-teal-deep); }
+  @media (prefers-color-scheme: dark) { .daily-row.today .bar-fill { background: var(--muted); } }
+  .daily-row .amt { width: 72px; text-align: right; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+
+  .top-items { display: flex; flex-direction: column; gap: 6px; }
+  .top-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .top-item .rank {
+    width: 18px; height: 18px; border-radius: var(--radius-full);
+    background: var(--surface); color: var(--stone); font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .chart .bar {
-    width: 100%;
-    max-width: 28px;
-    background: var(--brand-green);
-    border-radius: 4px 4px 0 0;
-    min-height: 2px;
-  }
-  .chart .bar.today { background: var(--brand-teal-deep); }
-  .chart .day-label { font-size: 10px; color: var(--stone); margin-top: 4px; }
-  footer {
-    text-align: center;
-    font-size: 11px;
-    color: var(--muted);
-    padding: 16px;
-  }
+  .top-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .top-item .variation { color: var(--stone); font-size: 11px; }
+  .top-item .amt { font-weight: 600; flex-shrink: 0; }
+
+  .pie-row { display: flex; align-items: center; gap: 16px; margin-top: 4px; }
+  .pie { width: 96px; height: 96px; border-radius: 50%; flex-shrink: 0; }
+  .legend { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .legend-name { flex: 1; color: var(--steel); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend-pct { font-weight: 600; }
+
+  footer { text-align: center; font-size: 11px; color: var(--muted); padding: 16px; }
   @media (min-width: 640px) {
     .locations { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     main { padding: 24px; }
@@ -206,11 +211,17 @@ const HTML = `<!doctype html>
 
 <script>
 const API = 'https://stfiazhmznssyfsiaxvw.supabase.co/functions/v1/dashboard-api';
+const CHART_COLORS = ['#00ed64','#3d4f9f','#fa6e39','#7b3ff2','#f06bb8','#00a35c'];
 let weekOffset = 0;
 let loading = false;
 
 function fmtMoney(n) {
   return '$' + Number(n).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtMoneyShort(n) {
+  n = Number(n);
+  if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k';
+  return '$' + Math.round(n);
 }
 function fmtDateRange(start, end) {
   const s = new Date(start + 'T00:00:00');
@@ -220,7 +231,9 @@ function fmtDateRange(start, end) {
 }
 function dayLabel(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
-  return ['일','월','화','수','목','금','토'][d.getDay()];
+  const dow = ['일','월','화','수','목','금','토'][d.getDay()];
+  const md = d.toLocaleDateString('en-CA', { month: 'numeric', day: 'numeric' });
+  return dow + ' ' + md;
 }
 function badgeHtml(pct) {
   if (pct === null || pct === undefined) return '<span class="badge flat">신규</span>';
@@ -228,15 +241,55 @@ function badgeHtml(pct) {
   const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '–';
   return '<span class="badge ' + dir + '">' + arrow + ' ' + Math.abs(pct) + '%</span>';
 }
-function renderChart(daily) {
+function renderDaily(daily) {
   if (!daily || daily.length === 0) return '';
   const max = Math.max(...daily.map(d => d.net_sales), 1);
   const todayStr = new Date().toISOString().slice(0, 10);
-  return '<div class="chart">' + daily.map(d => {
-    const h = Math.max(2, Math.round((d.net_sales / max) * 64));
+  const rows = daily.map(d => {
+    const w = Math.max(2, Math.round((d.net_sales / max) * 100));
     const isToday = d.business_date === todayStr;
-    return '<div class="bar-col"><div class="bar' + (isToday ? ' today' : '') + '" style="height:' + h + 'px" title="' + d.business_date + ': ' + fmtMoney(d.net_sales) + '"></div><div class="day-label">' + dayLabel(d.business_date) + '</div></div>';
-  }).join('') + '</div>';
+    return '<div class="daily-row' + (isToday ? ' today' : '') + '">' +
+      '<div class="day">' + dayLabel(d.business_date) + '</div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + w + '%"></div></div>' +
+      '<div class="amt">' + fmtMoneyShort(d.net_sales) + '</div>' +
+    '</div>';
+  }).join('');
+  return '<div class="section-title">일별 순매출</div><div class="daily-table">' + rows + '</div>';
+}
+function renderTopItems(items) {
+  if (!items || items.length === 0) return '';
+  const rows = items.map((it, i) => {
+    const variation = it.variation_name ? '<span class="variation">' + it.variation_name + '</span>' : '';
+    return '<div class="top-item">' +
+      '<div class="rank">' + (i+1) + '</div>' +
+      '<div class="name">' + it.item_name + ' ' + variation + '</div>' +
+      '<div class="amt">' + fmtMoney(it.net_sales) + '</div>' +
+    '</div>';
+  }).join('');
+  return '<div class="section-title">탑 세일 TOP 5</div><div class="top-items">' + rows + '</div>';
+}
+function renderCategoryPie(groups) {
+  if (!groups || groups.length === 0) return '';
+  let acc = 0;
+  const stops = groups.map((g, i) => {
+    const color = CHART_COLORS[i % CHART_COLORS.length];
+    const start = acc;
+    acc += g.pct;
+    return color + ' ' + start + '% ' + acc + '%';
+  }).join(', ');
+  const pieStyle = 'background: conic-gradient(' + stops + ');';
+  const legend = groups.map((g, i) => {
+    const color = CHART_COLORS[i % CHART_COLORS.length];
+    return '<div class="legend-item">' +
+      '<div class="legend-dot" style="background:' + color + '"></div>' +
+      '<div class="legend-name">' + g.name + '</div>' +
+      '<div class="legend-pct">' + g.pct + '%</div>' +
+    '</div>';
+  }).join('');
+  return '<div class="section-title">카테고리 비중</div><div class="pie-row">' +
+    '<div class="pie" style="' + pieStyle + '"></div>' +
+    '<div class="legend">' + legend + '</div>' +
+  '</div>';
 }
 function renderLocation(loc) {
   return '<div class="card">' +
@@ -250,7 +303,9 @@ function renderLocation(loc) {
       '<div class="stat"><div class="label">결제건수</div><div class="value">' + loc.order_count.toLocaleString() + '건</div></div>' +
       '<div class="stat"><div class="label">평균단가</div><div class="value">' + fmtMoney(loc.average_order_value) + '</div></div>' +
     '</div>' +
-    renderChart(loc.daily) +
+    renderDaily(loc.daily) +
+    renderTopItems(loc.top_items) +
+    renderCategoryPie(loc.category_groups) +
   '</div>';
 }
 
