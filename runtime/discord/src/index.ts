@@ -37,6 +37,10 @@ const ALLOWED_ANALYSIS = [
   "category_sales",
   "comparison",
   "customer_retention",
+  "social_posts",
+  "social_campaigns",
+  "social_ads",
+  "social_comments",
 ];
 
 function hexToBytes(hex: string): Uint8Array {
@@ -111,6 +115,10 @@ analysis 값은 반드시 다음 중 하나: ${ALLOWED_ANALYSIS.join(", ")}
 - category_sales: 카테고리별 매출 비중
 - comparison: 두 기간 비교 (compare_start, compare_end 필수)
 - customer_retention: 신규/재방문 고객 비율
+- social_posts: 인스타그램 포스트별 좋아요·댓글·공유·저장·도달 (limit로 개수 조절, item_name에 검색어 넣으면 캡션/태그 검색)
+- social_campaigns: 광고 캠페인 요약 (기간별 지출 대비 성과)
+- social_ads: 광고 캠페인별 일 단위 성과 (지출, 노출, 클릭, CTR·CPC)
+- social_comments: 인스타그램 댓글 원문 (item_name에 검색어 넣으면 댓글 내용 검색)
 
 location_id는 다음 중 하나 또는 null(전체): "LWEFT8C6SXJ7J"(Bon Sushi), "L7DA0MBKD2X4P"(CozyHaus)
 

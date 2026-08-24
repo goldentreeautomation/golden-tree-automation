@@ -96,4 +96,4 @@ INGESTION   Square │ Meta │ Notion │ GSC │ GBP │ 영수증
 | 9 | 과거 데이터 백필 | 부분 — 2025-06/07~ 존재. 완전성(페이지네이션) 미검증 |
 | 10 | 스케줄 등록 | 완료 — pg_cron이 매일 04:00 UTC(Regina 22:00) Edge Function 호출. 맥북 무관 |
 
-**M2 착수** — Discord `/ask` 봇(Gemini 라우팅) 1차 배포, `docs/decisions/0003`. 작업 끝날 때마다 표 갱신.
+**M2 착수** — Discord `/ask` 봇(`0003`), Meta 소셜·광고 동기화(`0004`) 1차 배포. 작업 끝날 때마다 표 갱신.
