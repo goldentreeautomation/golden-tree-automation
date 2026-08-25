@@ -1,7 +1,8 @@
 // Golden Tree — 대시보드 첫 페이지 (M1 #8)
 // 정적 HTML을 그대로 서빙한다. 데이터는 브라우저가 dashboard-api를 fetch해서 채운다.
-// 디자인 토큰: awesome-design-md/design-md/mongodb/DESIGN.md 기반, 다크모드는 휴대폰 설정을
-// 그대로 따라간다(prefers-color-scheme). 실제 폰트는 라이선스 문제로 시스템 폰트 폴백만 사용.
+// 디자인 토큰: awesome-design-md/design-md/figma/DESIGN.md 기반 (모노크롬 + 파스텔 블록 컬러,
+// 필 버튼). 다크모드는 이 시스템에 공식 정의가 없어 "가장 가까운 대안"인 block-navy를 그대로
+// 썼다(문서 576줄). 실제 폰트(figmaSans)는 라이선스 문제로 시스템 폰트 폴백만 사용.
 
 const HTML = `<!doctype html>
 <html lang="ko">
@@ -12,48 +13,45 @@ const HTML = `<!doctype html>
 <title>Golden Tree — 매출 대시보드</title>
 <style>
   :root {
-    --ink: #001e2b;
-    --steel: #5c6c7a;
-    --stone: #7c8c9a;
-    --muted: #a8b3bc;
+    --ink: #000000;
     --canvas: #ffffff;
-    --surface: #f9fbfa;
-    --hairline: #e1e5e8;
-    --hairline-soft: #eceff1;
-    --brand-green: #00ed64;
-    --brand-green-dark: #00684a;
-    --brand-green-soft: #c3f0d2;
-    --brand-teal-deep: #001e2b;
-    --negative: #d6455b;
-    --negative-soft: #fbe3e7;
-    --radius-lg: 12px;
+    --surface-soft: #f7f7f5;
+    --hairline: #e6e6e6;
+    --hairline-soft: #f1f1f1;
+    --stone: #6b6b6b;
+    --muted: #9a9a9a;
+    --positive-bg: #dceeb1;
+    --positive-text: #1a6b34;
+    --negative-bg: #f3c9b6;
+    --negative-text: #a13d24;
+    --today-fill: #000000;
+    --radius-card: 24px;
     --radius-md: 8px;
-    --radius-full: 9999px;
-    --chart-colors: #00ed64, #3d4f9f, #fa6e39, #7b3ff2, #f06bb8, #00a35c;
+    --radius-pill: 50px;
+    --chart-colors: #dceeb1, #c5b0f4, #f4ecd6, #c8e6cd, #efd4d4, #f3c9b6;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --ink: #eef2f3;
-      --steel: #a8b3bc;
-      --stone: #8a97a3;
-      --muted: #5c6c7a;
-      --canvas: #10181d;
-      --surface: #182229;
-      --hairline: #2a3841;
-      --hairline-soft: #1f2a31;
-      --brand-green: #00ed64;
-      --brand-green-dark: #4ee897;
-      --brand-green-soft: #113828;
-      --negative: #ff7b8f;
-      --negative-soft: #3a1c22;
+      --ink: #ffffff;
+      --canvas: #1f1d3d;
+      --surface-soft: #292750;
+      --hairline: #3c3a63;
+      --hairline-soft: #322f57;
+      --stone: #b9b7d6;
+      --muted: #7d7ba3;
+      --positive-bg: #2f4a2a;
+      --positive-text: #b7e59a;
+      --negative-bg: #4a2e2a;
+      --negative-text: #f3b39c;
+      --today-fill: #ffffff;
     }
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    background: var(--surface);
+    background: var(--surface-soft);
     color: var(--ink);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: figmaSans, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     padding-bottom: 40px;
   }
@@ -66,11 +64,13 @@ const HTML = `<!doctype html>
     padding: 14px 16px 12px;
   }
   .brand {
-    font-size: 13px;
+    font-family: figmaMono, ui-monospace, Menlo, monospace;
+    font-size: 12px;
     font-weight: 600;
     color: var(--stone);
-    letter-spacing: 0.3px;
-    margin-bottom: 8px;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
   }
   .week-nav {
     display: flex;
@@ -79,21 +79,21 @@ const HTML = `<!doctype html>
     gap: 8px;
   }
   .week-nav button {
-    border: 1px solid var(--hairline);
+    border: 1px solid var(--ink);
     background: var(--canvas);
     color: var(--ink);
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-full);
-    font-size: 16px;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-pill);
+    font-size: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
-  .week-nav button:disabled { color: var(--muted); }
+  .week-nav button:disabled { border-color: var(--hairline); color: var(--muted); }
   .week-label { text-align: center; flex: 1; }
-  .week-label .range { font-size: 16px; font-weight: 600; }
-  .week-label .tag { font-size: 12px; color: var(--stone); margin-top: 2px; }
+  .week-label .range { font-size: 18px; font-weight: 700; letter-spacing: -0.2px; }
+  .week-label .tag { font-family: figmaMono, ui-monospace, Menlo, monospace; font-size: 11px; color: var(--stone); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.4px; }
   main {
     padding: 16px;
     display: flex;
@@ -104,88 +104,89 @@ const HTML = `<!doctype html>
   }
   .loading, .error {
     text-align: center;
-    color: var(--steel);
+    color: var(--stone);
     padding: 40px 16px;
     font-size: 14px;
   }
-  .error { color: var(--negative); }
+  .error { color: var(--negative-text); }
   .card {
     background: var(--canvas);
-    border: 1px solid var(--hairline);
-    border-radius: var(--radius-lg);
-    padding: 20px;
+    border: 1px solid var(--ink);
+    border-radius: var(--radius-card);
+    padding: 24px;
   }
   .loc-name {
-    font-size: 13px;
+    font-family: figmaMono, ui-monospace, Menlo, monospace;
+    font-size: 12px;
     font-weight: 600;
     color: var(--stone);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
   }
   .net-sales-row {
     display: flex;
     align-items: baseline;
     gap: 10px;
-    margin-top: 6px;
+    margin-top: 8px;
     flex-wrap: wrap;
   }
-  .net-sales { font-size: 34px; font-weight: 600; letter-spacing: -0.5px; }
+  .net-sales { font-size: 34px; font-weight: 700; letter-spacing: -0.6px; }
   .badge {
     display: inline-flex;
     align-items: center;
     gap: 3px;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
     padding: 3px 10px;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-pill);
   }
-  .badge.up { background: var(--brand-green-soft); color: var(--brand-green-dark); }
-  .badge.down { background: var(--negative-soft); color: var(--negative); }
-  .badge.flat { background: var(--hairline-soft); color: var(--steel); }
-  .sub-label { font-size: 12px; color: var(--stone); margin-top: 2px; }
-  .stat-row { display: flex; gap: 12px; margin-top: 16px; }
-  .stat { flex: 1; background: var(--surface); border-radius: var(--radius-md); padding: 10px 12px; }
-  .stat .label { font-size: 11px; color: var(--stone); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
-  .stat .value { font-size: 18px; font-weight: 600; margin-top: 2px; }
+  .badge.up { background: var(--positive-bg); color: var(--positive-text); }
+  .badge.down { background: var(--negative-bg); color: var(--negative-text); }
+  .badge.flat { background: var(--hairline-soft); color: var(--stone); }
+  .sub-label { font-size: 12px; color: var(--stone); margin-top: 4px; }
+  .stat-row { display: flex; gap: 12px; margin-top: 18px; }
+  .stat { flex: 1; background: var(--surface-soft); border-radius: var(--radius-md); padding: 10px 12px; }
+  .stat .label { font-family: figmaMono, ui-monospace, Menlo, monospace; font-size: 10px; color: var(--stone); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .value { font-size: 18px; font-weight: 700; margin-top: 2px; }
 
   .section-title {
-    font-size: 12px;
+    font-family: figmaMono, ui-monospace, Menlo, monospace;
+    font-size: 11px;
     font-weight: 600;
     color: var(--stone);
     text-transform: uppercase;
-    letter-spacing: 0.4px;
-    margin: 18px 0 8px;
+    letter-spacing: 0.5px;
+    margin: 20px 0 8px;
   }
 
-  .daily-table { display: flex; flex-direction: column; gap: 1px; background: var(--hairline-soft); border-radius: var(--radius-md); overflow: hidden; }
-  .daily-row { display: flex; align-items: center; gap: 8px; background: var(--canvas); padding: 7px 10px; }
+  .daily-table { display: flex; flex-direction: column; gap: 1px; background: var(--hairline); border-radius: var(--radius-md); overflow: hidden; }
+  .daily-row { display: flex; align-items: center; gap: 8px; background: var(--canvas); padding: 8px 10px; }
   .daily-row .day { width: 48px; font-size: 12px; color: var(--stone); flex-shrink: 0; }
-  .daily-row .bar-track { flex: 1; height: 8px; background: var(--surface); border-radius: 4px; overflow: hidden; }
-  .daily-row .bar-fill { height: 100%; background: var(--brand-green); border-radius: 4px; }
-  .daily-row.today .bar-fill { background: var(--brand-teal-deep); }
-  @media (prefers-color-scheme: dark) { .daily-row.today .bar-fill { background: var(--muted); } }
-  .daily-row .amt { width: 88px; text-align: right; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+  .daily-row .bar-track { flex: 1; height: 8px; background: var(--surface-soft); border-radius: 4px; overflow: hidden; }
+  .daily-row .bar-fill { height: 100%; background: var(--positive-bg); border-radius: 4px; }
+  .daily-row.today .bar-fill { background: var(--today-fill); }
+  .daily-row .amt { width: 88px; text-align: right; font-size: 12px; font-weight: 700; flex-shrink: 0; }
 
   .top-items { display: flex; flex-direction: column; gap: 6px; }
   .top-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .top-item .rank {
-    width: 18px; height: 18px; border-radius: var(--radius-full);
-    background: var(--surface); color: var(--stone); font-size: 10px; font-weight: 700;
+    width: 18px; height: 18px; border-radius: var(--radius-pill);
+    background: var(--ink); color: var(--canvas); font-size: 10px; font-weight: 700;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .top-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .top-item .variation { color: var(--stone); font-size: 11px; }
-  .top-item .amt { font-weight: 600; flex-shrink: 0; }
+  .top-item .amt { font-weight: 700; flex-shrink: 0; }
 
   .pie-row { display: flex; align-items: center; gap: 16px; margin-top: 4px; }
-  .pie { width: 96px; height: 96px; border-radius: 50%; flex-shrink: 0; }
+  .pie { width: 96px; height: 96px; border-radius: 50%; flex-shrink: 0; border: 1px solid var(--ink); }
   .legend { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-  .legend-name { flex: 1; color: var(--steel); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .legend-pct { font-weight: 600; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; border: 1px solid var(--ink); flex-shrink: 0; }
+  .legend-name { flex: 1; color: var(--stone); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend-pct { font-weight: 700; }
 
-  footer { text-align: center; font-size: 11px; color: var(--muted); padding: 16px; }
+  footer { font-family: figmaMono, ui-monospace, Menlo, monospace; text-align: center; font-size: 10px; color: var(--muted); padding: 16px; letter-spacing: 0.3px; }
   @media (min-width: 640px) {
     .locations { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     main { padding: 24px; }
@@ -207,11 +208,11 @@ const HTML = `<!doctype html>
 <main>
   <div id="content" class="loading">불러오는 중...</div>
 </main>
-<footer>매출 = Net Sales(총매출−할인), 세금·팁 제외 · 데이터는 매일 자동 갱신됩니다</footer>
+<footer>매출 = NET SALES(총매출−할인), 세금·팁 제외 · 데이터는 매일 자동 갱신됩니다</footer>
 
 <script>
 const API = 'https://stfiazhmznssyfsiaxvw.supabase.co/functions/v1/dashboard-api';
-const CHART_COLORS = ['#00ed64','#3d4f9f','#fa6e39','#7b3ff2','#f06bb8','#00a35c'];
+const CHART_COLORS = ['#dceeb1','#c5b0f4','#f4ecd6','#c8e6cd','#efd4d4','#f3c9b6'];
 let weekOffset = 0;
 let loading = false;
 
