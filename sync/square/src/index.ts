@@ -52,20 +52,6 @@ async function callRpc(fn: string, args: Record<string, unknown>, attempt = 0): 
   return res.json();
 }
 
-async function queryLastSync(syncKey: string) {
-  const res = await fetch(
-    `${SUPABASE_URL}/rest/v1/sync_log?sync_key=eq.${syncKey}&status=eq.success&order=window_end.desc&limit=1`,
-    {
-      headers: {
-        "apikey": SERVICE_ROLE_KEY,
-        "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
-      },
-    },
-  );
-  const rows = await res.json();
-  return rows[0] ?? null;
-}
-
 // America/Regina는 DST가 없다(연중 CST, UTC-6). 하드코딩하지 않고 Intl로 계산한다.
 function reginaParts(iso: string) {
   const d = new Date(iso);
@@ -273,9 +259,11 @@ Deno.serve(async (req) => {
   if (body.since) {
     startIso = new Date(body.since).toISOString();
   } else {
-    const last = await queryLastSync(syncKey);
-    const lastWindowEnd = last ? new Date(last.window_end) : new Date(now.getTime() - 3 * 24 * 3600 * 1000);
-    startIso = new Date(lastWindowEnd.getTime() - 48 * 3600 * 1000).toISOString(); // W1: 마지막 성공 - 48시간
+    // 매시간 실행으로 바뀌면서(2026-08-25) "마지막 성공 - 48h"로 매번 밀어가던 방식은
+    // 오래된 구간을 다시 놓치는 문제가 있어, 항상 "지금 - 48h"로 고정했다. Square 주문이
+    // 사후 수정될 수 있어 매번 48시간을 다시 훑는다(W1) — idempotent upsert라 비용은
+    // 재조회뿐, 데이터 중복은 없다.
+    startIso = new Date(now.getTime() - 48 * 3600 * 1000).toISOString();
   }
   const endIso = body.until ? new Date(body.until).toISOString() : now.toISOString();
 

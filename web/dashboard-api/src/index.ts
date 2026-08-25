@@ -202,6 +202,14 @@ Deno.serve(async (req) => {
     );
     const topItemsMap = Object.fromEntries(topItemsByLocation);
 
+    // Regina 시장 수요 예상 — 실제 혼잡도 아님, 시장 신호 기반 추정치 (2026-08-25 추가)
+    const marketDemandByLocation = await Promise.all(
+      LOCATIONS.map((loc) =>
+        rpc("analytics_market_demand_latest", { p_location_id: loc.id }).then((r: any) => [loc.id, r] as const)
+      ),
+    );
+    const marketDemandMap = Object.fromEntries(marketDemandByLocation);
+
     const byId = (rows: any[]) => Object.fromEntries(rows.map((r: any) => [r.location_id, r]));
     const curById = byId(curSales);
     const prevById = byId(prevSales);
@@ -225,6 +233,7 @@ Deno.serve(async (req) => {
         daily: dailyMap[loc.id] ?? [],
         category_groups: categoryMap[loc.id] ?? [],
         top_items: topItemsMap[loc.id] ?? [],
+        market_demand: marketDemandMap[loc.id] ?? null,
       };
     });
 

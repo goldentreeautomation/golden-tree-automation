@@ -187,28 +187,82 @@ const HTML = `<!doctype html>
   .legend-pct { font-weight: 700; }
 
   footer { font-family: figmaMono, ui-monospace, Menlo, monospace; text-align: center; font-size: 10px; color: var(--muted); padding: 16px; letter-spacing: 0.3px; }
-  @media (min-width: 640px) {
-    .locations { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    main { padding: 24px; }
+
+  /* ── 레이아웃: 왼쪽 시장 수요 예상(주력) / 오른쪽 매출 위젯(보조) ── */
+  .layout { display: flex; flex-direction: column; gap: 20px; }
+  .demand-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .sales-col { min-width: 0; }
+  @media (min-width: 900px) {
+    .layout { display: grid; grid-template-columns: 1fr 340px; align-items: start; gap: 20px; }
+  }
+
+  .disclaimer {
+    font-size: 11px; color: var(--stone); background: var(--surface-soft);
+    border: 1px dashed var(--hairline); border-radius: var(--radius-md);
+    padding: 8px 12px; line-height: 1.5;
+  }
+
+  /* ── 시장 수요 카드 ── */
+  .demand-card { display: flex; flex-direction: column; gap: 4px; }
+  .demand-score-row { display: flex; align-items: baseline; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+  .demand-score { font-size: 40px; font-weight: 700; letter-spacing: -0.6px; }
+  .demand-score .of100 { font-size: 16px; font-weight: 600; color: var(--stone); }
+  .demand-band {
+    display: inline-flex; align-items: center; font-size: 13px; font-weight: 700;
+    padding: 3px 10px; border-radius: var(--radius-pill);
+  }
+  .demand-band.quiet { background: var(--hairline-soft); color: var(--stone); }
+  .demand-band.normal { background: var(--surface-soft); color: var(--ink); border: 1px solid var(--hairline); }
+  .demand-band.busy { background: var(--positive-bg); color: var(--positive-text); }
+  .demand-band.very_busy { background: var(--negative-bg); color: var(--negative-text); }
+  .demand-delta { font-size: 12px; color: var(--stone); }
+
+  .period-row { display: flex; gap: 8px; margin-top: 16px; }
+  .period-stat {
+    flex: 1; background: var(--surface-soft); border-radius: var(--radius-md);
+    padding: 8px 10px; text-align: center; border: 1px solid transparent;
+  }
+  .period-stat.current { border-color: var(--ink); background: var(--canvas); }
+  .period-stat .p-label { font-family: figmaMono, ui-monospace, Menlo, monospace; font-size: 9px; color: var(--stone); text-transform: uppercase; letter-spacing: 0.4px; }
+  .period-stat .p-score { font-size: 16px; font-weight: 700; margin-top: 2px; }
+
+  .reason-list { display: flex; flex-direction: column; gap: 5px; margin-top: 4px; }
+  .reason-item { display: flex; gap: 6px; font-size: 12.5px; align-items: flex-start; }
+  .reason-item .sign { flex-shrink: 0; font-weight: 700; width: 12px; }
+  .reason-item.pos .sign { color: var(--positive-text); }
+  .reason-item.neg .sign { color: var(--negative-text); }
+  .reason-item .text { color: var(--stone); }
+
+  .demand-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--hairline-soft); }
+
+  /* ── 매출 위젯(오른쪽, 축약형) ── */
+  .widget-card { padding: 18px; }
+  .widget-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 10px; }
+  .widget-header button {
+    border: 1px solid var(--ink); background: var(--canvas); color: var(--ink);
+    width: 30px; height: 30px; border-radius: var(--radius-pill); font-size: 14px;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .widget-header button:disabled { border-color: var(--hairline); color: var(--muted); }
+  .widget-header .week-label { text-align: center; flex: 1; }
+  .widget-header .range { font-size: 13px; font-weight: 700; letter-spacing: -0.1px; }
+  .widget-header .tag { font-family: figmaMono, ui-monospace, Menlo, monospace; font-size: 9px; color: var(--stone); text-transform: uppercase; }
+  .sales-col .net-sales { font-size: 26px; }
+  .sales-col .card + .card { margin-top: 12px; }
+
+  @media (min-width: 640px) and (max-width: 899px) {
+    .demand-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   }
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">82 Bakeshop — Net Sales</div>
-  <div class="week-nav">
-    <button id="prevWeek" aria-label="이전 주">&#8249;</button>
-    <div class="week-label">
-      <div class="range" id="weekRange">불러오는 중...</div>
-      <div class="tag" id="weekTag"></div>
-    </div>
-    <button id="nextWeek" aria-label="다음 주">&#8250;</button>
-  </div>
+  <div class="brand">82 Bakeshop — Golden Tree</div>
 </header>
 <main>
   <div id="content" class="loading">불러오는 중...</div>
 </main>
-<footer>매출 = NET SALES(총매출−할인), 세금·팁 제외 · 데이터는 매일 자동 갱신됩니다</footer>
+<footer>매출 = NET SALES(총매출−할인), 세금·팁 제외 · 데이터는 자동 갱신됩니다</footer>
 
 <script>
 const API = 'https://stfiazhmznssyfsiaxvw.supabase.co/functions/v1/dashboard-api';
@@ -305,11 +359,65 @@ function renderLocation(loc) {
   '</div>';
 }
 
+const PERIOD_LABEL = { morning: '오전', afternoon: '오후', evening: '저녁' };
+const BAND_LABEL = { quiet: '한산할 것으로 예상', normal: '평소 수준으로 예상', busy: '바쁠 것으로 예상', very_busy: '매우 바쁠 것으로 예상' };
+const CONFIDENCE_LABEL = { low: '낮음', medium: '보통', high: '높음' };
+
+function currentReginaPeriod() {
+  const hour = Number(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Regina', hour: '2-digit', hour12: false }).format(new Date()));
+  if (hour >= 6 && hour < 11) return 'morning';
+  if (hour >= 11 && hour < 17) return 'afternoon';
+  return 'evening';
+}
+function fmtReginaTime(iso) {
+  return new Date(iso).toLocaleTimeString('ko-KR', { timeZone: 'America/Regina', hour: 'numeric', minute: '2-digit' });
+}
+function deltaLabel(delta) {
+  if (delta === null || delta === undefined) return '';
+  if (delta === 0) return '<span class="demand-delta">어제와 동일</span>';
+  const sign = delta > 0 ? '+' : '';
+  return '<span class="demand-delta">어제 대비 ' + sign + delta + 'pt</span>';
+}
+function renderMarketDemand(loc) {
+  const md = loc.market_demand;
+  if (!md || !md.periods || md.periods.length === 0) {
+    return '<div class="card demand-card"><div class="loc-name">' + loc.location_name + '</div>' +
+      '<div class="sub-label" style="margin-top:12px;">아직 수집된 예상치가 없습니다</div></div>';
+  }
+  const nowPeriod = currentReginaPeriod();
+  const cur = md.periods.find(p => p.period === nowPeriod) || md.periods[0];
+  const periods = md.periods.map(p => {
+    return '<div class="period-stat' + (p.period === cur.period ? ' current' : '') + '">' +
+      '<div class="p-label">' + PERIOD_LABEL[p.period] + '</div>' +
+      '<div class="p-score">' + p.score + '</div>' +
+    '</div>';
+  }).join('');
+  const reasons = (cur.reasons || []).map(r => {
+    const isPos = r.sign === '+';
+    return '<div class="reason-item ' + (isPos ? 'pos' : 'neg') + '">' +
+      '<div class="sign">' + (isPos ? '+' : '−') + '</div>' +
+      '<div class="text">' + r.text + '</div>' +
+    '</div>';
+  }).join('');
+  return '<div class="card demand-card">' +
+    '<div class="loc-name">' + loc.location_name + '</div>' +
+    '<div class="demand-score-row">' +
+      '<div class="demand-score">' + cur.score + '<span class="of100">/100</span></div>' +
+      '<div class="demand-band ' + cur.demand_band + '">' + BAND_LABEL[cur.demand_band] + '</div>' +
+    '</div>' +
+    deltaLabel(cur.vs_yesterday) +
+    '<div class="period-row">' + periods + '</div>' +
+    (reasons ? '<div class="section-title">주요 원인</div><div class="reason-list">' + reasons + '</div>' : '') +
+    '<div class="demand-meta">' +
+      '<span>신뢰도 ' + CONFIDENCE_LABEL[cur.confidence] + '</span>' +
+      '<span>갱신 ' + fmtReginaTime(cur.calculated_at) + '</span>' +
+    '</div>' +
+  '</div>';
+}
+
 async function load() {
   if (loading) return;
   loading = true;
-  document.getElementById('prevWeek').disabled = true;
-  document.getElementById('nextWeek').disabled = true;
   const content = document.getElementById('content');
   content.className = 'loading';
   content.textContent = '불러오는 중...';
@@ -319,23 +427,39 @@ async function load() {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    document.getElementById('weekRange').textContent = fmtDateRange(data.week_start, data.week_end);
-    document.getElementById('weekTag').textContent = data.is_current_week ? '이번 주 (진행 중)' : '';
+    const demandHtml =
+      '<div class="section-title" style="margin-top:0;">Regina 시장 수요 예상</div>' +
+      '<div class="disclaimer">실제 방문객 수가 아닌 시장 신호(과거 실적·날씨·요일·캘린더) 기반 예상입니다. 확정된 혼잡도가 아닙니다.</div>' +
+      data.locations.map(renderMarketDemand).join('');
 
-    content.className = 'locations';
-    content.innerHTML = data.locations.map(renderLocation).join('');
+    const salesHtml =
+      '<div class="card widget-card">' +
+        '<div class="widget-header">' +
+          '<button id="prevWeek" aria-label="이전 주">&#8249;</button>' +
+          '<div class="week-label">' +
+            '<div class="range" id="weekRange">' + fmtDateRange(data.week_start, data.week_end) + '</div>' +
+            '<div class="tag" id="weekTag">' + (data.is_current_week ? '이번 주 (진행 중)' : '') + '</div>' +
+          '</div>' +
+          '<button id="nextWeek" aria-label="다음 주">&#8250;</button>' +
+        '</div>' +
+      '</div>' +
+      data.locations.map(renderLocation).join('');
+
+    content.className = 'layout';
+    content.innerHTML =
+      '<div class="demand-col">' + demandHtml + '</div>' +
+      '<div class="sales-col">' + salesHtml + '</div>';
+
+    document.getElementById('prevWeek').addEventListener('click', () => { weekOffset -= 1; load(); });
+    document.getElementById('nextWeek').addEventListener('click', () => { if (weekOffset < 0) { weekOffset += 1; load(); } });
+    document.getElementById('nextWeek').disabled = weekOffset >= 0;
   } catch (err) {
     content.className = 'error';
     content.textContent = '불러오지 못했습니다: ' + err.message;
   } finally {
     loading = false;
-    document.getElementById('prevWeek').disabled = false;
-    document.getElementById('nextWeek').disabled = weekOffset >= 0;
   }
 }
-
-document.getElementById('prevWeek').addEventListener('click', () => { weekOffset -= 1; load(); });
-document.getElementById('nextWeek').addEventListener('click', () => { if (weekOffset < 0) { weekOffset += 1; load(); } });
 
 load();
 </script>
