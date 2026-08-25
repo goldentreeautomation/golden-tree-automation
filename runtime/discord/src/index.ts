@@ -111,8 +111,10 @@ analysis 값은 반드시 다음 중 하나: ${ALLOWED_ANALYSIS.join(", ")}
 - sales_summary: 특정 기간 매출 요약 (순매출, 주문수, 객단가)
 - location_sales: 두 매장 비교
 - top_items: 잘 팔린 품목 순위 (item_name 필요없음, limit로 개수 조절)
-- item_sales: 특정 품목 하나의 판매 현황 (item_name 필수, 메뉴명은 영어로 변환해서 넣어라)
-- modifier_sales: 오트밀크·아몬드밀크 등 옵션(modifier) 단위 주문 건수·수량·매출 (item_name에 옵션명, 영어로. 예: "Oat Milk")
+- item_sales: 메뉴판에 그 자체로 이름이 있는 품목 하나의 판매 현황 (예: Latte, Dynamite Roll, Macaron). item_name 필수, 영어로
+- modifier_sales: 음료/메뉴에 "추가"하는 옵션 단위 조회. 우유 종류(Oat/Almond/Soy/Coconut/Skim Milk), 시럽, Decaf, Extra Shot처럼
+  그 자체로는 주문할 수 없고 다른 메뉴에 딸려 나오는 것들. "오트밀크 몇 건", "아몬드밀크 주문 얼마나" 같은 질문은
+  무조건 이거다 — item_sales로 보내면 안 된다(그런 이름의 독립 메뉴가 없어서 0건으로 잘못 나온다). item_name에 옵션명, 영어로 (예: "Oat Milk")
 - hourly_sales: 시간대별 매출
 - daily_sales: 일자별 매출
 - monthly_sales: 월별 매출 (역대 최고/최저 달, 월별 추이 질문에 사용. "지금까지"/"역대"는 start_date를 2025-01-01로)
@@ -196,7 +198,7 @@ async function handleAsk(question: string, token: string) {
       return;
     }
 
-    const result = await rpc("analytics_dispatch", {
+    let result = await rpc("analytics_dispatch", {
       p_analysis: plan.analysis,
       p_start_date: plan.start_date,
       p_end_date: plan.end_date,
@@ -206,6 +208,25 @@ async function handleAsk(question: string, token: string) {
       p_compare_end: plan.compare_end ?? null,
       p_item_name: plan.item_name ?? null,
     });
+
+    // 안전장치: item_sales로 갔는데 결과가 0건이면 modifier(우유 종류 등)일 가능성이 높다 —
+    // 독립 메뉴가 아니라서 item_sales로는 절대 못 찾는다. 자동으로 한 번 더 시도한다.
+    if (plan.analysis === "item_sales" && (result?.data?.total_quantity ?? 0) === 0 && plan.item_name) {
+      const retry = await rpc("analytics_dispatch", {
+        p_analysis: "modifier_sales",
+        p_start_date: plan.start_date,
+        p_end_date: plan.end_date,
+        p_location_id: plan.location_id ?? null,
+        p_limit: plan.limit ?? 10,
+        p_compare_start: null,
+        p_compare_end: null,
+        p_item_name: plan.item_name,
+      });
+      if ((retry?.data?.total_quantity ?? 0) > 0) {
+        result = retry;
+        plan.analysis = "modifier_sales";
+      }
+    }
 
     const answer = await callGemini(
       answerSystemPrompt(),

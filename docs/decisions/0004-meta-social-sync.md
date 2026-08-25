@@ -44,3 +44,8 @@ M2 착수 순서(`docs/decisions/0003` 이전, `golden-tree-design.md` M2~M3 착
 - `analytics_post_item_sales_trend`(마이그레이션 0005): 특정 메뉴를 다룬 포스트를 캡션·태그로 찾아, 발행일부터 0~3일간 그 메뉴 매출 추이. 한글 메뉴명("마차라떼")은 캡션이 영어라 안 잡힐 수 있어 라우터가 영어로 변환해서 검색하도록 안내함
 - `analytics_modifier_sales`(마이그레이션 0006): 오트밀크 등 modifier(옵션) 단위 조회 — `order_items.raw->'modifiers'`에 이미 있던 데이터를 활용. item_name과 별개 축이라 새 함수 필요했음
 - Discord 답변 생성 프롬프트에 "상관관계일 뿐 인과관계 아님"을 항상 덧붙이도록 지시 추가
+- 실사용 중 발견: "오트밀크 몇 건"을 봇이 `item_sales`(독립 메뉴 검색)로 잘못 분류해 0건으로 답함 —
+  프롬프트에 item_sales/modifier_sales 구분 기준과 예시를 명확히 추가하고, item_sales가 0건이면
+  자동으로 modifier_sales를 한 번 더 시도하는 안전장치 추가(마이그레이션 불필요, 코드만 수정)
+- 실사용 중 발견: "오트밀크를 12oz/16oz로 나눠서" — `analytics_modifier_sales`가 item_name으로만
+  묶여 사이즈 구분이 안 됐음. `order_items.variation_name`으로 그룹핑 기준 추가(마이그레이션 0007)
