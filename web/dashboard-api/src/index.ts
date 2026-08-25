@@ -151,18 +151,33 @@ Deno.serve(async (req) => {
 
   const cur = weekRange(weekOffset);
   const prev = weekRange(weekOffset - 1);
-  // 지난주와 "같은 요일까지" 비교해야 공정하다 (이번 주가 아직 안 끝났으면)
-  const daysIntoWeek =
-    (new Date(cur.end).getTime() - new Date(cur.start).getTime()) / 86400000;
-  const prevEnd = new Date(prev.start);
-  prevEnd.setUTCDate(prevEnd.getUTCDate() + daysIntoWeek);
-  const prevCompareEnd = toDateStr(prevEnd);
+  const isCurrentWeek = weekOffset === 0;
 
   try {
-    const [curSales, prevSales] = await Promise.all([
-      rpc("analytics_location_sales_v2", { p_start: cur.start, p_end: cur.end }),
-      rpc("analytics_location_sales_v2", { p_start: prev.start, p_end: prevCompareEnd }),
-    ]);
+    // 이번 주(진행 중)는 "저번주 같은 요일 전체"가 아니라 "저번주 이 시각까지"와 비교해야
+    // 공정하다 — 예: 화요일 새벽 1시엔 저번주도 화요일 새벽 1시까지만 잘라서 비교한다.
+    // Regina는 연중 고정 UTC-6(DST 없음)이라 -06:00 오프셋을 직접 써도 안전하다.
+    // (오너 지적, 2026-08-25 — 전엔 날짜 단위로만 잘라 "이번 주 화요일 1시간"을
+    // "저번주 화요일 24시간"과 비교하는 바람에 항상 불공정하게 낮게 나왔다.)
+    let curSales: any[];
+    let prevSales: any[];
+    if (isCurrentWeek) {
+      const thisMondayTs = new Date(cur.start + "T00:00:00-06:00");
+      const nowTs = new Date();
+      const elapsedMs = nowTs.getTime() - thisMondayTs.getTime();
+      const prevMondayTs = new Date(prev.start + "T00:00:00-06:00");
+      const prevCutoffTs = new Date(prevMondayTs.getTime() + elapsedMs);
+      [curSales, prevSales] = await Promise.all([
+        rpc("analytics_location_sales_by_timestamp", { p_start_ts: thisMondayTs.toISOString(), p_end_ts: nowTs.toISOString() }),
+        rpc("analytics_location_sales_by_timestamp", { p_start_ts: prevMondayTs.toISOString(), p_end_ts: prevCutoffTs.toISOString() }),
+      ]);
+    } else {
+      // 과거 완결된 주끼리 비교할 땐 부분-일 문제가 없으니 기존 날짜 단위 비교로 충분하다.
+      [curSales, prevSales] = await Promise.all([
+        rpc("analytics_location_sales_v2", { p_start: cur.start, p_end: cur.end }),
+        rpc("analytics_location_sales_v2", { p_start: prev.start, p_end: prev.fullWeekEnd }),
+      ]);
+    }
 
     const dailyByLocation = await Promise.all(
       LOCATIONS.map((loc) =>
@@ -245,7 +260,7 @@ Deno.serve(async (req) => {
         full_week_end: cur.fullWeekEnd,
         is_current_week: weekOffset === 0,
         compare_start: prev.start,
-        compare_end: prevCompareEnd,
+        compare_end: isCurrentWeek ? prev.end : prev.fullWeekEnd,
         locations,
       }),
       { headers: { "content-type": "application/json", ...corsHeaders() } },
