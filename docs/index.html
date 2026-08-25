@@ -5,9 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="color-scheme" content="light dark" />
 <title>Golden Tree — 매출 대시보드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --ink: #000000;
+    --ink: #17161f;
     --canvas: #ffffff;
     --surface-soft: #f7f7f5;
     --hairline: #e6e6e6;
@@ -18,17 +21,20 @@
     --positive-text: #1a6b34;
     --negative-bg: #f3c9b6;
     --negative-text: #a13d24;
-    --today-fill: #000000;
+    --today-fill: #17161f;
+    --accent: #c5b0f4;
     --radius-card: 24px;
-    --radius-md: 8px;
+    --radius-md: 12px;
     --radius-pill: 50px;
+    --shadow-card: 0 1px 2px -1px rgba(0,0,0,.08), 0 4px 16px -4px rgba(0,0,0,.06);
+    --shadow-pop: 0 2px 4px -2px rgba(0,0,0,.1), 0 8px 24px -8px rgba(0,0,0,.1);
     --chart-colors: #dceeb1, #c5b0f4, #f4ecd6, #c8e6cd, #efd4d4, #f3c9b6;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --ink: #ffffff;
-      --canvas: #1f1d3d;
-      --surface-soft: #292750;
+      --ink: #f4f3fb;
+      --canvas: #24223f;
+      --surface-soft: #2c2a4c;
       --hairline: #3c3a63;
       --hairline-soft: #322f57;
       --stone: #b9b7d6;
@@ -37,153 +43,130 @@
       --positive-text: #b7e59a;
       --negative-bg: #4a2e2a;
       --negative-text: #f3b39c;
-      --today-fill: #ffffff;
+      --today-fill: #f4f3fb;
+      --shadow-card: 0 1px 2px -1px rgba(0,0,0,.3), 0 4px 16px -4px rgba(0,0,0,.35);
+      --shadow-pop: 0 2px 4px -2px rgba(0,0,0,.35), 0 8px 24px -8px rgba(0,0,0,.4);
     }
+    body { background: #1a1830; }
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     background: var(--surface-soft);
     color: var(--ink);
-    font-family: figmaSans, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    font-family: Inter, "SF Pro Display", system-ui, Helvetica, sans-serif;
     -webkit-font-smoothing: antialiased;
-    padding-bottom: 40px;
+    padding-bottom: 48px;
   }
   header {
     position: sticky;
     top: 0;
     z-index: 10;
-    background: var(--canvas);
-    border-bottom: 1px solid var(--hairline);
-    padding: 14px 16px 12px;
+    background: color-mix(in srgb, var(--canvas) 82%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--hairline-soft);
+    padding: 16px 20px;
   }
   .brand {
-    font-family: figmaMono, ui-monospace, Menlo, monospace;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
-    color: var(--stone);
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-  }
-  .week-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  .week-nav button {
-    border: 1px solid var(--ink);
-    background: var(--canvas);
     color: var(--ink);
-    width: 40px;
-    height: 40px;
-    border-radius: var(--radius-pill);
-    font-size: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    letter-spacing: -0.01em;
   }
-  .week-nav button:disabled { border-color: var(--hairline); color: var(--muted); }
-  .week-label { text-align: center; flex: 1; }
-  .week-label .range { font-size: 18px; font-weight: 700; letter-spacing: -0.2px; }
-  .week-label .tag { font-family: figmaMono, ui-monospace, Menlo, monospace; font-size: 11px; color: var(--stone); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .brand .dim { color: var(--muted); font-weight: 500; }
   main {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    max-width: 720px;
+    padding: 20px 16px;
+    max-width: 1080px;
     margin: 0 auto;
   }
   .loading, .error {
     text-align: center;
     color: var(--stone);
-    padding: 40px 16px;
+    padding: 60px 16px;
     font-size: 14px;
   }
   .error { color: var(--negative-text); }
   .card {
     background: var(--canvas);
-    border: 1px solid var(--ink);
+    border: 1px solid var(--hairline-soft);
+    box-shadow: var(--shadow-card);
     border-radius: var(--radius-card);
-    padding: 24px;
+    padding: 26px;
   }
   .loc-name {
-    font-family: figmaMono, ui-monospace, Menlo, monospace;
     font-size: 12px;
     font-weight: 600;
     color: var(--stone);
     text-transform: uppercase;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.06em;
   }
   .net-sales-row {
     display: flex;
     align-items: baseline;
     gap: 10px;
-    margin-top: 8px;
+    margin-top: 10px;
     flex-wrap: wrap;
   }
-  .net-sales { font-size: 34px; font-weight: 700; letter-spacing: -0.6px; }
+  .net-sales { font-size: clamp(28px, 4vw, 36px); font-weight: 700; letter-spacing: -0.03em; }
   .badge {
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    font-size: 13px;
-    font-weight: 700;
-    padding: 3px 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 4px 11px;
     border-radius: var(--radius-pill);
   }
   .badge.up { background: var(--positive-bg); color: var(--positive-text); }
   .badge.down { background: var(--negative-bg); color: var(--negative-text); }
   .badge.flat { background: var(--hairline-soft); color: var(--stone); }
-  .sub-label { font-size: 12px; color: var(--stone); margin-top: 4px; }
-  .stat-row { display: flex; gap: 12px; margin-top: 18px; }
-  .stat { flex: 1; background: var(--surface-soft); border-radius: var(--radius-md); padding: 10px 12px; }
-  .stat .label { font-family: figmaMono, ui-monospace, Menlo, monospace; font-size: 10px; color: var(--stone); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-  .stat .value { font-size: 18px; font-weight: 700; margin-top: 2px; }
+  .sub-label { font-size: 12.5px; color: var(--stone); margin-top: 5px; }
+  .stat-row { display: flex; gap: 10px; margin-top: 20px; }
+  .stat { flex: 1; background: var(--surface-soft); border-radius: var(--radius-md); padding: 12px 14px; }
+  .stat .label { font-size: 10px; color: var(--stone); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  .stat .value { font-size: 18px; font-weight: 700; margin-top: 3px; letter-spacing: -0.01em; }
 
   .section-title {
-    font-family: figmaMono, ui-monospace, Menlo, monospace;
     font-size: 11px;
     font-weight: 600;
     color: var(--stone);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin: 20px 0 8px;
+    letter-spacing: 0.06em;
+    margin: 22px 0 10px;
   }
 
-  .daily-table { display: flex; flex-direction: column; gap: 1px; background: var(--hairline); border-radius: var(--radius-md); overflow: hidden; }
-  .daily-row { display: flex; align-items: center; gap: 8px; background: var(--canvas); padding: 8px 10px; }
+  .daily-table { display: flex; flex-direction: column; gap: 1px; background: var(--hairline-soft); border-radius: var(--radius-md); overflow: hidden; }
+  .daily-row { display: flex; align-items: center; gap: 8px; background: var(--canvas); padding: 9px 12px; }
   .daily-row .day { width: 48px; font-size: 12px; color: var(--stone); flex-shrink: 0; }
   .daily-row .bar-track { flex: 1; height: 8px; background: var(--surface-soft); border-radius: 4px; overflow: hidden; }
   .daily-row .bar-fill { height: 100%; background: var(--positive-bg); border-radius: 4px; }
   .daily-row.today .bar-fill { background: var(--today-fill); }
-  .daily-row .amt { width: 88px; text-align: right; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .daily-row .amt { width: 88px; text-align: right; font-size: 12px; font-weight: 600; flex-shrink: 0; }
 
-  .top-items { display: flex; flex-direction: column; gap: 6px; }
-  .top-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .top-items { display: flex; flex-direction: column; gap: 8px; }
+  .top-item { display: flex; align-items: center; gap: 10px; font-size: 13px; }
   .top-item .rank {
-    width: 18px; height: 18px; border-radius: var(--radius-pill);
+    width: 20px; height: 20px; border-radius: var(--radius-pill);
     background: var(--ink); color: var(--canvas); font-size: 10px; font-weight: 700;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .top-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .top-item .variation { color: var(--stone); font-size: 11px; }
-  .top-item .amt { font-weight: 700; flex-shrink: 0; }
+  .top-item .amt { font-weight: 600; flex-shrink: 0; }
 
-  .pie-row { display: flex; align-items: center; gap: 16px; margin-top: 4px; }
-  .pie { width: 96px; height: 96px; border-radius: 50%; flex-shrink: 0; border: 1px solid var(--ink); }
-  .legend { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
-  .legend-dot { width: 10px; height: 10px; border-radius: 3px; border: 1px solid var(--ink); flex-shrink: 0; }
+  .pie-row { display: flex; align-items: center; gap: 18px; margin-top: 4px; }
+  .pie { width: 92px; height: 92px; border-radius: 50%; flex-shrink: 0; box-shadow: var(--shadow-card); }
+  .legend { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
   .legend-name { flex: 1; color: var(--stone); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .legend-pct { font-weight: 700; }
+  .legend-pct { font-weight: 600; }
 
-  footer { font-family: figmaMono, ui-monospace, Menlo, monospace; text-align: center; font-size: 10px; color: var(--muted); padding: 16px; letter-spacing: 0.3px; }
+  footer { text-align: center; font-size: 11px; color: var(--muted); padding: 20px 16px 8px; letter-spacing: 0.01em; }
 
   /* ── 레이아웃: 왼쪽 시장 수요 예상(주력) / 오른쪽 매출 위젯(보조) ── */
-  .layout { display: flex; flex-direction: column; gap: 20px; }
+  .layout { display: flex; flex-direction: column; gap: 16px; }
   .demand-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
   .sales-col { min-width: 0; }
   @media (min-width: 900px) {
@@ -191,57 +174,60 @@
   }
 
   .disclaimer {
-    font-size: 11px; color: var(--stone); background: var(--surface-soft);
-    border: 1px dashed var(--hairline); border-radius: var(--radius-md);
-    padding: 8px 12px; line-height: 1.5;
+    font-size: 11.5px; color: var(--stone); background: var(--surface-soft);
+    border-radius: var(--radius-md);
+    padding: 10px 14px; line-height: 1.55;
   }
 
   /* ── 시장 수요 카드 ── */
   .demand-card { display: flex; flex-direction: column; gap: 4px; }
-  .demand-score-row { display: flex; align-items: baseline; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
-  .demand-score { font-size: 40px; font-weight: 700; letter-spacing: -0.6px; }
-  .demand-score .of100 { font-size: 16px; font-weight: 600; color: var(--stone); }
+  .demand-score-row { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .demand-score { font-size: clamp(34px, 5vw, 44px); font-weight: 700; letter-spacing: -0.04em; }
+  .demand-score .of100 { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: normal; }
   .demand-band {
-    display: inline-flex; align-items: center; font-size: 13px; font-weight: 700;
-    padding: 3px 10px; border-radius: var(--radius-pill);
+    display: inline-flex; align-items: center; font-size: 12.5px; font-weight: 600;
+    padding: 4px 11px; border-radius: var(--radius-pill);
   }
   .demand-band.quiet { background: var(--hairline-soft); color: var(--stone); }
-  .demand-band.normal { background: var(--surface-soft); color: var(--ink); border: 1px solid var(--hairline); }
+  .demand-band.normal { background: var(--surface-soft); color: var(--ink); }
   .demand-band.busy { background: var(--positive-bg); color: var(--positive-text); }
   .demand-band.very_busy { background: var(--negative-bg); color: var(--negative-text); }
   .demand-delta { font-size: 12px; color: var(--stone); }
 
-  .period-row { display: flex; gap: 8px; margin-top: 16px; }
+  .period-row { display: flex; gap: 8px; margin-top: 18px; }
   .period-stat {
     flex: 1; background: var(--surface-soft); border-radius: var(--radius-md);
-    padding: 8px 10px; text-align: center; border: 1px solid transparent;
+    padding: 10px 8px; text-align: center;
   }
-  .period-stat.current { border-color: var(--ink); background: var(--canvas); }
-  .period-stat .p-label { font-family: figmaMono, ui-monospace, Menlo, monospace; font-size: 9px; color: var(--stone); text-transform: uppercase; letter-spacing: 0.4px; }
-  .period-stat .p-score { font-size: 16px; font-weight: 700; margin-top: 2px; }
+  .period-stat.current { background: var(--ink); }
+  .period-stat.current .p-label,
+  .period-stat.current .p-score { color: var(--canvas); }
+  .period-stat .p-label { font-size: 9.5px; color: var(--stone); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .period-stat .p-score { font-size: 17px; font-weight: 700; margin-top: 3px; letter-spacing: -0.02em; }
 
-  .reason-list { display: flex; flex-direction: column; gap: 5px; margin-top: 4px; }
-  .reason-item { display: flex; gap: 6px; font-size: 12.5px; align-items: flex-start; }
+  .reason-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+  .reason-item { display: flex; gap: 7px; font-size: 12.5px; align-items: flex-start; }
   .reason-item .sign { flex-shrink: 0; font-weight: 700; width: 12px; }
   .reason-item.pos .sign { color: var(--positive-text); }
   .reason-item.neg .sign { color: var(--negative-text); }
   .reason-item .text { color: var(--stone); }
 
-  .demand-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--hairline-soft); }
+  .demand-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--hairline-soft); }
 
   /* ── 매출 위젯(오른쪽, 축약형) ── */
-  .widget-card { padding: 18px; }
-  .widget-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 10px; }
+  .widget-card { padding: 20px; }
+  .widget-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
   .widget-header button {
-    border: 1px solid var(--ink); background: var(--canvas); color: var(--ink);
+    border: none; background: var(--surface-soft); color: var(--ink);
     width: 30px; height: 30px; border-radius: var(--radius-pill); font-size: 14px;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .widget-header button:disabled { border-color: var(--hairline); color: var(--muted); }
+  .widget-header button:disabled { color: var(--muted); }
   .widget-header .week-label { text-align: center; flex: 1; }
-  .widget-header .range { font-size: 13px; font-weight: 700; letter-spacing: -0.1px; }
-  .widget-header .tag { font-family: figmaMono, ui-monospace, Menlo, monospace; font-size: 9px; color: var(--stone); text-transform: uppercase; }
-  .sales-col .net-sales { font-size: 26px; }
+  .widget-header .range { font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+  .widget-header .tag { font-size: 9.5px; color: var(--stone); text-transform: uppercase; letter-spacing: 0.04em; }
+  .sales-col .section-title { font-size: 10px; }
+  .sales-col .net-sales { font-size: 24px; }
   .sales-col .card + .card { margin-top: 12px; }
 
   @media (min-width: 640px) and (max-width: 899px) {
@@ -251,7 +237,7 @@
 </head>
 <body>
 <header>
-  <div class="brand">82 Bakeshop — Golden Tree</div>
+  <div class="brand">82 Bakeshop <span class="dim">· Golden Tree</span></div>
 </header>
 <main>
   <div id="content" class="loading">불러오는 중...</div>
@@ -386,7 +372,8 @@ function renderMarketDemand(loc) {
       '<div class="p-score">' + p.score + '</div>' +
     '</div>';
   }).join('');
-  const reasons = (cur.reasons || []).map(r => {
+  const reasonList = typeof cur.reasons === 'string' ? JSON.parse(cur.reasons) : (cur.reasons || []);
+  const reasons = reasonList.map(r => {
     const isPos = r.sign === '+';
     return '<div class="reason-item ' + (isPos ? 'pos' : 'neg') + '">' +
       '<div class="sign">' + (isPos ? '+' : '−') + '</div>' +

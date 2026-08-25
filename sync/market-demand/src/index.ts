@@ -277,11 +277,13 @@ Deno.serve(async (req) => {
           calendar_impact: cal.impact,
           search_impact: 0,
           operations_impact: hist.impact,
-          reasons: JSON.stringify(reasons),
-          source_status: JSON.stringify({
+          // jsonb 컬럼이므로 문자열로 stringify하면 안 된다 — 그러면 jsonb 안에 "JSON 텍스트"가
+          // 그대로 들어가 이중 인코딩되고, 프론트에서 .map()이 실패한다(배열이 아니라 문자열이 됨).
+          reasons,
+          source_status: {
             weather: "ok", calendar: "ok", history: hist.sample_weeks >= 4 ? "ok" : "insufficient_data",
             unavailable: unavailableSignals,
-          }),
+          },
           calculated_at: calculatedAt,
         });
       }
@@ -305,7 +307,7 @@ Deno.serve(async (req) => {
       air_quality_index: null,
       same_weekday_baseline_net_sales: null,
       same_weekday_baseline_order_count: null,
-      raw: JSON.stringify({ weather_current: weather.current }),
+      raw: { weather_current: weather.current },
     }));
     await upsert("market_demand_features", featureRows, "brand_id,observed_at");
 
