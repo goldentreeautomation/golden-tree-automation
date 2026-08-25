@@ -49,3 +49,7 @@ M2 착수 순서(`docs/decisions/0003` 이전, `golden-tree-design.md` M2~M3 착
   자동으로 modifier_sales를 한 번 더 시도하는 안전장치 추가(마이그레이션 불필요, 코드만 수정)
 - 실사용 중 발견: "오트밀크를 12oz/16oz로 나눠서" — `analytics_modifier_sales`가 item_name으로만
   묶여 사이즈 구분이 안 됐음. `order_items.variation_name`으로 그룹핑 기준 추가(마이그레이션 0007)
+- 오너 피드백: 포스팅 효과는 당일이 아니라 보통 1~3일 뒤에 나타난다 — 화요일 포스팅이면 수·목·금
+  매출 추이를 봐야 한다는 것. `analytics_social_sales_correlation`을 day_offset 0~3으로 확장
+  (마이그레이션 0008). 요일 편중을 피하려고 각 offset일은 "포스팅 요일"이 아니라 "그 offset일
+  자체의 요일" 기준 4주 평균과 비교한다(예: +1일이 수요일이면 수요일 평균과 비교)
