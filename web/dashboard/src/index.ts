@@ -10,7 +10,7 @@ const HTML = `<!doctype html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="color-scheme" content="light dark" />
+<meta name="color-scheme" content="light" />
 <title>Golden Tree — 매출 대시보드</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -36,25 +36,6 @@ const HTML = `<!doctype html>
     --shadow-card: 0 1px 2px -1px rgba(0,0,0,.08), 0 4px 16px -4px rgba(0,0,0,.06);
     --shadow-pop: 0 2px 4px -2px rgba(0,0,0,.1), 0 8px 24px -8px rgba(0,0,0,.1);
     --chart-colors: #dceeb1, #c5b0f4, #f4ecd6, #c8e6cd, #efd4d4, #f3c9b6;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --ink: #f4f3fb;
-      --canvas: #24223f;
-      --surface-soft: #2c2a4c;
-      --hairline: #3c3a63;
-      --hairline-soft: #322f57;
-      --stone: #b9b7d6;
-      --muted: #7d7ba3;
-      --positive-bg: #2f4a2a;
-      --positive-text: #b7e59a;
-      --negative-bg: #4a2e2a;
-      --negative-text: #f3b39c;
-      --today-fill: #f4f3fb;
-      --shadow-card: 0 1px 2px -1px rgba(0,0,0,.3), 0 4px 16px -4px rgba(0,0,0,.35);
-      --shadow-pop: 0 2px 4px -2px rgba(0,0,0,.35), 0 8px 24px -8px rgba(0,0,0,.4);
-    }
-    body { background: #1a1830; }
   }
   * { box-sizing: border-box; }
   body {
