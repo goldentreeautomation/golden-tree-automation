@@ -158,6 +158,51 @@ async function fetchAllOrders(startIso: string, endIso: string) {
   return orders;
 }
 
+// Square 고객(Customers API) — 매장 구분 없이 상인(merchant) 전체 단위. 원래 M2 스펙에
+// 있었는데(docs/golden-tree-design.md 1.4 입출력 정의) Square 동기화를 n8n에서 이 Edge
+// Function으로 재구현할 때 빠뜨려서 2026-08-17부터 갱신이 멈춰 있었다(오너 지적, 2026-08-25).
+async function fetchAllCustomers(startIso: string, endIso: string) {
+  const customers: any[] = [];
+  let cursor: string | undefined = undefined;
+  do {
+    const body: any = {
+      query: {
+        filter: { updated_at: { start_at: startIso, end_at: endIso } },
+        sort: { field: "DEFAULT", order: "ASC" },
+      },
+      limit: 100,
+    };
+    if (cursor) body.cursor = cursor;
+    const res = await fetch(`${SQUARE_API_BASE}/customers/search`, {
+      method: "POST",
+      headers: squareHeaders(),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`customers/search failed: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    customers.push(...(data.customers ?? []));
+    cursor = data.cursor;
+  } while (cursor);
+  return customers;
+}
+
+function normalizeCustomer(c: any) {
+  return {
+    square_customer_id: c.id,
+    given_name: c.given_name ?? null,
+    family_name: c.family_name ?? null,
+    company_name: c.company_name ?? null,
+    email_address: c.email_address ?? null,
+    phone_number: c.phone_number ?? null,
+    reference_id: c.reference_id ?? null,
+    created_at: c.created_at,
+    updated_at: c.updated_at ?? null,
+    first_seen_at: c.created_at,
+    last_seen_at: c.updated_at ?? c.created_at,
+    raw: c,
+  };
+}
+
 async function fetchAllPayments(startIso: string, endIso: string) {
   const payments: any[] = [];
   for (const locationId of LOCATIONS) {
@@ -268,10 +313,11 @@ Deno.serve(async (req) => {
   const endIso = body.until ? new Date(body.until).toISOString() : now.toISOString();
 
   try {
-    const [squareOrders, payments, refunds] = await Promise.all([
+    const [squareOrders, payments, refunds, squareCustomers] = await Promise.all([
       fetchAllOrders(startIso, endIso),
       fetchAllPayments(startIso, endIso),
       fetchAllRefunds(startIso, endIso),
+      fetchAllCustomers(startIso, endIso),
     ]);
 
     const normalized = squareOrders.map(normalizeOrder);
@@ -312,6 +358,11 @@ Deno.serve(async (req) => {
       await callRpc("ingest_square_payments", { p_payments: [], p_refunds: rChunk });
     }
 
+    const normCustomers = squareCustomers.map(normalizeCustomer);
+    for (const cChunk of chunk(normCustomers, 300)) {
+      await callRpc("ingest_square_batch", { p_orders: [], p_items: [], p_customers: cChunk, p_sync: {} });
+    }
+
     return new Response(
       JSON.stringify({
         status: "success",
@@ -321,6 +372,7 @@ Deno.serve(async (req) => {
         items: items.length,
         payments: normPayments.length,
         refunds: normRefunds.length,
+        customers: normCustomers.length,
       }),
       { headers: { "content-type": "application/json" } },
     );
