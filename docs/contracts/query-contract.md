@@ -55,6 +55,14 @@ Discord를 거치지 않고 백엔드 코드가 이름으로 직접 부른다.
 | `analytics_market_demand_latest(p_location_id)` | `dashboard-api` | 오늘 시장 수요 예상 3구간 |
 | `market_demand_baseline`, `market_demand_dow_profile` | `sync/market-demand` | 수요 예상 점수의 "과거 실적" 신호 계산 |
 
+## C. 레시피 원가율 감시 (M3 조기 착수, 2026-08-25)
+
+| 함수 | 용도 |
+|---|---|
+| `analytics_recipe_cost_overview(p_location_id)` | 활성 레시피별 현재 재료원가율·기준초과 여부·연속초과일수 |
+
+`recipe_cost_current`(뷰)가 재료 단가 변경 시 실시간으로 원가율을 재계산한다. 상세 설계는 `docs/decisions/0011`(예정).
+
 ## 사용되지 않는(고아) 함수 — 계약에서 제외
 
 아래는 DB엔 존재하지만 `analytics_dispatch`도, 대시보드도 호출하지 않는다. 레거시 또는 상위 버전으로 대체된 것들 — **새 코드에서 쓰지 말 것**. 정리(DROP)는 G4 대상이라 별도 승인 시 진행.
