@@ -76,10 +76,15 @@ function money(m: { amount?: number } | undefined) {
 
 function normalizeOrder(o: any) {
   const { businessDate, businessHour, dayOfWeek } = reginaParts(o.created_at);
-  const total = money(o.total_money);
-  const tax = money(o.total_tax_money);
-  const tip = money(o.total_tip_money);
-  const discount = money(o.total_discount_money);
+  // 환불·반품은 Square가 원본 주문을 고치지 않고 "반품 전용 주문"을 따로 만든다. 이 주문엔
+  // line_items/total_money 등 표준 필드가 없고 net_amounts(음수)만 있다 — 그대로 두면
+  // money(undefined)=0이라 반품이 매출에서 전혀 빠지지 않는다(오너 지적으로 발견,
+  // docs/decisions/0001 버그 #3, docs/decisions/0009). net_amounts로 대체하면 정상 주문은
+  // total_money가 있어 그대로 쓰이므로(?? 연산자) 기존 동작에 영향 없다.
+  const total = money(o.total_money ?? o.net_amounts?.total_money);
+  const tax = money(o.total_tax_money ?? o.net_amounts?.tax_money);
+  const tip = money(o.total_tip_money ?? o.net_amounts?.tip_money);
+  const discount = money(o.total_discount_money ?? o.net_amounts?.discount_money);
   const net_sales = Math.round((total - tax - tip) * 100) / 100;
   const gross_sales = Math.round((net_sales + discount) * 100) / 100;
 
