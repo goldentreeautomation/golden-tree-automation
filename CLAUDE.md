@@ -91,7 +91,7 @@ INGESTION   Square │ Meta │ Notion │ GSC │ GBP │ 영수증
 | 4 | Square 동기화 | 완료 — `sync/square/` Edge Function으로 재구현(n8n 미사용). 고객(Customers API) 동기화 누락분 발견·복구(`0008`) |
 | 5 | 재실행 안전성 검증 | 완료 — 동일 구간 3회 실행, 행 수 불변 확인 |
 | 6 | Square Dashboard 대조 | 완료 — 오류 16건 전부 확인·해결(1번 저우선순위 미수정 제외). 환불 중복(3번)·페이지네이션(9번) 해결(`0009`,`0010`) |
-| 7 | Query 함수 5개 | 부분 — 레거시 함수 20여 개 버그 수정 완료(마이그레이션 0001). `docs/contracts/` 정식 등록 남음 |
+| 7 | Query 함수 5개 | 완료 — `docs/contracts/query-contract.md`에 실사용 함수(A. Discord 라우팅 / B. 대시보드 직접호출) 및 고아 함수 정리 |
 | 8 | 대시보드 첫 페이지 | 완료 — 정적 HTML+Edge Function(Next.js 아님, `docs/decisions/0002`). 오너 휴대폰 확인 대기 |
 | 9 | 과거 데이터 백필 | 완료 — 전체 기간(70,013건) Square API 원본과 주문 ID 단위 대조, 8/13 공백(35건) 발견·복구(`0010`) |
 | 10 | 스케줄 등록 | 완료 — Square 동기화 매시간 5분(`square-hourly-sync`)로 전환(2026-08-25, 시장 수요 예상 최신성 위해). 맥북 무관 |
