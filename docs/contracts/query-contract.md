@@ -37,8 +37,8 @@ Discord 봇의 유일한 진입점. `p_analysis` 값에 따라 내부적으로 �
 | `social_sales_correlation` | `analytics_social_sales_correlation`(4-arg, `p_days_after=3` 고정) | 포스팅↔매출 상관관계, 발행일+1~3일 각각 같은 요일 4주 평균과 비교 | - |
 | `post_item_trend` | `analytics_post_item_sales_trend`(`p_days_after=3` 고정) | 특정 포스팅 태그/캡션과 매칭되는 품목의 발행 후 판매 추이 | `p_item_name` |
 | `social_posts` | (dispatch 내부 인라인 쿼리) | 포스팅 목록 + 최신 인게이지먼트 지표 | - |
-| `social_campaigns` | `analytics_social_campaigns` | 광고 캠페인 목록 | - |
-| `social_ads` | (dispatch 내부 인라인 쿼리) | 캠페인별 집행 성과(지출·클릭·전환) | - |
+| `social_campaigns` | `analytics_social_campaigns` | 광고 캠페인 목록·개수 집계 **(금액 데이터 없음)** | - |
+| `social_ads` | (dispatch 내부 인라인 쿼리) | 캠페인별 집행 성과(지출·클릭·전환·CTR·CPC·**cost_per_result**) | - |
 | `social_comments` | (dispatch 내부 인라인 쿼리) | 댓글 목록 + 감정 분류 | - |
 
 **주의 — `p_location_id` 매칭 방식이 함수마다 다르다**: `location_sales`/`daily_sales` 등 매출 계열은 정확한 Square `location_id`(`LWEFT8C6SXJ7J`/`L7DA0MBKD2X4P`)만 받는다. 반면 `social_posts`/`social_ads`/`social_comments`는 **문자열 매칭**으로 매장을 추론한다(`p_location_id`가 `LWEFT8C6SXJ7J`/Instagram 계정ID/`"Bon Sushi"`면 Bon Sushi, `lower(p_location_id)`에 `"cozy"`가 들어 있으면 CozyHaus로 매칭) — 오타나 이름 변경 시 오배정 위험이 있음(`docs/decisions/0001` 버그 #1, 낮은 우선순위로 미수정 상태). 라우터 프롬프트(`runtime/discord/src/index.ts`)가 이 값을 정확한 Square location_id로 채우도록 유지해야 한다.

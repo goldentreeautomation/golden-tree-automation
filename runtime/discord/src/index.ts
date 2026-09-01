@@ -124,8 +124,8 @@ analysis 값은 반드시 다음 중 하나: ${ALLOWED_ANALYSIS.join(", ")}
 - social_sales_correlation: 인스타 포스트 발행일 + 이후 3일간, 그날그날 매출을 "그 요일 최근 4주 평균"과 비교(day_offset 0~3). 요일 편중을 피하려고 포스팅 당일이 아니라 각 offset일 자체의 요일 기준으로 비교한다 (인과관계 아님, 상관관계만). "포스팅하면 매출 늘어?", "포스팅하고 며칠 뒤에 효과 나타나?" 류 질문에 사용
 - post_item_trend: 특정 메뉴를 다룬 포스트 발행 후 0~3일간 그 메뉴 매출 추이 (item_name 필수, 영어 메뉴명. "라떼 포스트 올리고 라떼 잘 팔렸어?" 류 질문)
 - social_posts: 인스타그램 포스트별 좋아요·댓글·공유·저장·도달 (limit로 개수 조절, item_name에 검색어 넣으면 캡션/태그 검색)
-- social_campaigns: 광고 캠페인 요약 (기간별 지출 대비 성과)
-- social_ads: 광고 캠페인별 일 단위 성과 (지출, 노출, 클릭, CTR·CPC)
+- social_campaigns: 광고 캠페인 "목록·개수"만 (몇 개 있는지, 목적/상태별 집계). **금액·지출·성과 지표가 전혀 없다** — "캠페인 몇 개야", "어떤 목적으로 도는 게 많아" 류에만 사용
+- social_ads: 광고 캠페인별 지출·노출·클릭·CTR·CPC·results·**cost_per_result**(결과 1건당 비용). PAGE_LIKES 목적 캠페인의 results는 페이지 좋아요(팔로우) 수이므로 cost_per_result가 곧 "팔로우당 비용(cost per follow)". 비용·성과·효율 비교, "cost per X가 얼마인데 다른 광고 대비 어때" 류는 전부 이거 — social_campaigns 아님
 - social_comments: 인스타그램 댓글 원문 (item_name에 검색어 넣으면 댓글 내용 검색)
 
 location_id는 다음 중 하나 또는 null(전체): "LWEFT8C6SXJ7J"(Bon Sushi), "L7DA0MBKD2X4P"(CozyHaus)
@@ -151,7 +151,13 @@ function answerSystemPrompt(): string {
 숫자만 사용해서 한국어로 짧고 명확하게 답해라. 데이터에 없는 숫자를 지어내지 마라.
 금액은 CAD 달러 기준이고 이미 세금·팁이 제외된 Net Sales다. 존댓말을 쓰되 간결하게. 이모지 쓰지 마라.
 vs_baseline_pct나 포스트-매출 관련 데이터를 설명할 땐 반드시 "상관관계일 뿐 그 포스트 때문이라고
-단정할 수 없다"는 취지를 짧게 덧붙여라 — 다른 요인(요일, 날씨, 프로모션 등)일 수도 있다.`;
+단정할 수 없다"는 취지를 짧게 덧붙여라 — 다른 요인(요일, 날씨, 프로모션 등)일 수도 있다.
+
+사용자가 물어본 정확한 지표(예: 특정 이름의 비용 지표)가 JSON에 없어도, 대화를 거기서 끊지 마라.
+JSON 안에 있는 가장 가까운 비교 가능한 숫자를 찾아 먼저 직접 계산해서 보여줘라(예: spend/results,
+spend/clicks 같은 간단한 나눗셈은 네가 직접 해라 — 없다고 하지 말고). 그래도 정말 비교할 게 없으면
+"이 데이터엔 없지만 대신 OO은 있는데 그걸로 볼까요?" 식으로 구체적인 대안 지표를 먼저 제안하며
+끝내라. "제공된 데이터로는 알 수 없습니다"로 끝내는 답은 마지막 수단이다.`;
 }
 
 async function rpc(fn: string, args: Record<string, unknown>): Promise<any> {
