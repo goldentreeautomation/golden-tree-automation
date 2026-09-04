@@ -35,4 +35,4 @@
 
 ## 결과 (사후 기록)
 
-`discord-bot` v10 배포 완료. Gemini API 실제 키를 가져올 수 없어(Management API 시크릿 조회는 마스킹된 값만 반환) 로컬에서 end-to-end 테스트는 못 했고, 코드 리뷰와 공식 문서 스펙 대조로 검증함. **오너가 실제 Discord에서 원래 질문(매니저의 5~8월 비교+SNS 연관 분석)으로 테스트 필요** — 문제 있으면 바로 대응.
+`discord-bot` v10 배포 후 오너 실제 테스트에서 즉시 오류 발견: `400 INVALID_ARGUMENT — Role 'function' is not supported`. `gemini-3.6-flash`는 유효 role 목록에 `FUNCTION`이 없고 `USER`만 있음(문서로 확인 못 하고 실제 API 응답으로 확정) — function response 턴의 role을 `"function"` → `"user"`로 수정, v11 재배포. 이후 재테스트 결과는 오너 확인 대기.
