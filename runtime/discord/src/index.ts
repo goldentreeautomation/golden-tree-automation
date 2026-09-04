@@ -261,8 +261,10 @@ async function handleAsk(question: string, token: string) {
       const args = functionCallPart.functionCall.args ?? {};
       if (args.analysis) usedAnalyses.add(String(args.analysis));
       const toolResult = await executeQueryData(args);
+      // gemini-3.6-flash는 role "function"을 안 받는다(400 INVALID_ARGUMENT, 실제 배포 후
+      // 확인됨) — 유효 role 목록에 USER만 있고 FUNCTION/TOOL이 없다. "user"로 보낸다.
       contents.push({
-        role: "function",
+        role: "user",
         parts: [{ functionResponse: { name: "query_data", response: toolResult } }],
       });
     }
