@@ -90,12 +90,26 @@ function reginaTodayStr(): string {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+// fetch()는 기본적으로 타임아웃이 없다 — 상대 서버가 응답 없이 연결만 붙잡고 있으면 영원히
+// 기다린다. 오너가 실제로 겪음(1시 4분에 물어본 게 2시 18분까지 "생각 중"으로 멈춰있었음,
+// 2026-09-04) — 원인은 이거였을 가능성이 크다. 모든 외부 호출에 타임아웃을 강제한다.
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // 무료 티어 Gemini가 "high demand"로 503을 자주 뱉는다(2026-09-04, 오너 보고 — 질문마다
 // 실패). 일시적 과부하라 재시도로 대부분 흡수된다. 지수 백오프 2회.
 async function callGeminiRaw(body: any, attempt = 0): Promise<any> {
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    30000,
   );
   if (res.status === 503 && attempt < 2) {
     await new Promise((r) => setTimeout(r, 800 * Math.pow(2, attempt)));
@@ -194,7 +208,7 @@ ${ANALYSIS_DESCRIPTIONS}
 }
 
 async function rpc(fn: string, args: Record<string, unknown>): Promise<any> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+  const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: "POST",
     headers: {
       apikey: SERVICE_ROLE_KEY,
@@ -202,7 +216,7 @@ async function rpc(fn: string, args: Record<string, unknown>): Promise<any> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(args),
-  });
+  }, 20000);
   if (!res.ok) throw new Error(`RPC ${fn} failed: ${res.status} ${await res.text()}`);
   return res.json();
 }
