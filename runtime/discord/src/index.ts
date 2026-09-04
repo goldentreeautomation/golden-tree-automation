@@ -176,7 +176,12 @@ ${ANALYSIS_DESCRIPTIONS}
   그래도 없으면 "이 데이터엔 없지만 대신 OO은 있는데 그걸로 볼까요?"처럼 구체적인 대안을 먼저 제안해라.
   "제공된 데이터로는 알 수 없습니다"로 끝내는 답은 마지막 수단이다
 - 질문이 이 도구로 답할 수 있는 범위(매출/품목/시간대/카테고리/소셜/광고)를 완전히 벗어나면 도구를
-  호출하지 말고 그렇다고 짧게 답해라`;
+  호출하지 말고 그렇다고 짧게 답해라
+
+도구 호출 결과에 "error" 필드가 있으면 조회가 실패한 것이다. 바로 포기하지 말고 에러 메시지를 읽고
+원인을 스스로 판단해서 파라미터를 고쳐 다시 호출해라 — 예: 날짜 범위가 너무 길면 좁혀라, item_name이
+빠졌다고 하면 채워라, analysis 이름이 틀렸다고 하면 목록에서 맞는 걸 다시 골라라. 같은 실수를 그대로
+반복하지 마라. 두세 번 고쳐봐도 계속 실패하면 사용자에게 어떤 조회가 왜 안 됐는지 짧게 설명해라.`;
 }
 
 async function rpc(fn: string, args: Record<string, unknown>): Promise<any> {
@@ -232,7 +237,7 @@ async function executeQueryData(args: any): Promise<any> {
   return result;
 }
 
-const MAX_TOOL_CALLS = 5;
+const MAX_TOOL_CALLS = 6;
 
 async function handleAsk(question: string, token: string) {
   try {
@@ -264,7 +269,17 @@ async function handleAsk(question: string, token: string) {
       contents.push(modelContent);
       const args = functionCallPart.functionCall.args ?? {};
       if (args.analysis) usedAnalyses.add(String(args.analysis));
-      const toolResult = await executeQueryData(args);
+
+      // 조회가 실패해도(잘못된 파라미터, 유효성 검사 실패 등) 대화를 바로 끊지 않는다 — 실패
+      // 이유를 Gemini에게 그대로 보여주면 스스로 파라미터를 고쳐서 재시도할 수 있다(예: 날짜
+      // 범위가 너무 김, item_name 빠뜨림). 사람 개입 없이 대화 안에서 자체 시행착오.
+      let toolResult: any;
+      try {
+        toolResult = await executeQueryData(args);
+      } catch (err) {
+        toolResult = { error: String(err).slice(0, 500) };
+      }
+
       // gemini-3.6-flash는 role "function"을 안 받는다(400 INVALID_ARGUMENT, 실제 배포 후
       // 확인됨) — 유효 role 목록에 USER만 있고 FUNCTION/TOOL이 없다. "user"로 보낸다.
       contents.push({
