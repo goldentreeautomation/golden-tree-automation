@@ -21,6 +21,8 @@
 
 Discord 봇의 유일한 진입점. `p_analysis` 값에 따라 내부적으로 아래 함수 중 하나로 라우팅한다. 날짜 범위는 최대 730일(단, `social_campaigns`는 예외 없음).
 
+**호출 방식(2026-09-04 변경)**: Discord 봇은 더 이상 "질문당 1번"만 호출하지 않는다. Gemini function calling으로 `query_data`(=`analytics_dispatch` 래퍼) 도구를 노출하고, 복잡한 질문(예: 매출 비교+SNS 연관 분석처럼 여러 데이터가 필요한 질문)이면 최대 5번까지 반복 호출해 데이터를 모은 뒤 답한다. 여러 번 호출해도 `analytics_dispatch` 밖으로는 못 나간다 — `analysis` 값은 매 호출마다 서버가 `ALLOWED_ANALYSIS`로 재검증한다. 상세: `docs/decisions/0013`.
+
 | p_analysis | 내부 함수 | 용도 | 필수 파라미터 |
 |---|---|---|---|
 | `sales_summary` | `analytics_sales_summary_v2` | 기간·매장별 순매출 요약 | - |
@@ -36,10 +38,10 @@ Discord 봇의 유일한 진입점. `p_analysis` 값에 따라 내부적으로 �
 | `category_sales` | `analytics_category_sales` | 카테고리별 매출 비중 | - |
 | `social_sales_correlation` | `analytics_social_sales_correlation`(4-arg, `p_days_after=3` 고정) | 포스팅↔매출 상관관계, 발행일+1~3일 각각 같은 요일 4주 평균과 비교 | - |
 | `post_item_trend` | `analytics_post_item_sales_trend`(`p_days_after=3` 고정) | 특정 포스팅 태그/캡션과 매칭되는 품목의 발행 후 판매 추이 | `p_item_name` |
-| `social_posts` | (dispatch 내부 인라인 쿼리) | 포스팅 목록 + 최신 인게이지먼트 지표 | - |
+| `social_posts` | (dispatch 내부 인라인 쿼리) | 포스팅 목록 + 최신 인게이지먼트 지표. 날짜는 `published_date`(America/Regina, generated column) 사용 — `published_at`(UTC)의 날짜를 직접 읽으면 자정 근처 게시물이 하루 밀린다 | - |
 | `social_campaigns` | `analytics_social_campaigns` | 광고 캠페인 목록·개수 집계 **(금액 데이터 없음)** | - |
 | `social_ads` | (dispatch 내부 인라인 쿼리) | 캠페인별 집행 성과(지출·클릭·전환·CTR·CPC·**cost_per_result**) | - |
-| `social_comments` | (dispatch 내부 인라인 쿼리) | 댓글 목록 + 감정 분류 | - |
+| `social_comments` | (dispatch 내부 인라인 쿼리) | 댓글 목록 + 감정 분류. 날짜는 `created_date`(America/Regina, generated column) 사용 | - |
 
 **주의 — `p_location_id` 매칭 방식이 함수마다 다르다**: `location_sales`/`daily_sales` 등 매출 계열은 정확한 Square `location_id`(`LWEFT8C6SXJ7J`/`L7DA0MBKD2X4P`)만 받는다. 반면 `social_posts`/`social_ads`/`social_comments`는 **문자열 매칭**으로 매장을 추론한다(`p_location_id`가 `LWEFT8C6SXJ7J`/Instagram 계정ID/`"Bon Sushi"`면 Bon Sushi, `lower(p_location_id)`에 `"cozy"`가 들어 있으면 CozyHaus로 매칭) — 오타나 이름 변경 시 오배정 위험이 있음(`docs/decisions/0001` 버그 #1, 낮은 우선순위로 미수정 상태). 라우터 프롬프트(`runtime/discord/src/index.ts`)가 이 값을 정확한 Square location_id로 채우도록 유지해야 한다.
 
