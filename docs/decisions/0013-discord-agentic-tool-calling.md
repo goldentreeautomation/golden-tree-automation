@@ -35,4 +35,9 @@
 
 ## 결과 (사후 기록)
 
-`discord-bot` v10 배포 후 오너 실제 테스트에서 즉시 오류 발견: `400 INVALID_ARGUMENT — Role 'function' is not supported`. `gemini-3.6-flash`는 유효 role 목록에 `FUNCTION`이 없고 `USER`만 있음(문서로 확인 못 하고 실제 API 응답으로 확정) — function response 턴의 role을 `"function"` → `"user"`로 수정, v11 재배포. 이후 재테스트 결과는 오너 확인 대기.
+`discord-bot` v10 배포 후 오너 실제 테스트로 오류 2건을 순차 발견·수정(둘 다 문서화 안 된 `gemini-3.6-flash` thinking 모델 고유 동작이라 실제 호출해보고서야 알 수 있었음):
+
+1. `400 INVALID_ARGUMENT — Role 'function' is not supported`. 유효 role에 `FUNCTION`이 없고 `USER`만 있음 — function response 턴 role을 `"user"`로 수정(v11).
+2. `400 — Function call is missing a thought_signature`. thinking 모델은 functionCall part에 `thought_signature`를 같이 실어 보내는데, `functionCall` 필드만 뽑아 대화 기록을 재구성하면서 유실시켰음 — 모델이 준 content를 통째로 그대로 돌려주도록 수정(v12).
+
+이후 재테스트 결과는 오너 확인 대기.
