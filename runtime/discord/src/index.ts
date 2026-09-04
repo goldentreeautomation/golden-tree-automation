@@ -248,7 +248,8 @@ async function handleAsk(question: string, token: string) {
         systemInstruction: { parts: [{ text: agentSystemPrompt(today) }] },
         tools: isLastAttempt ? undefined : [queryDataTool()],
       });
-      const parts = data.candidates?.[0]?.content?.parts ?? [];
+      const modelContent = data.candidates?.[0]?.content;
+      const parts = modelContent?.parts ?? [];
       const functionCallPart = parts.find((p: any) => p.functionCall);
       const textPart = parts.map((p: any) => p.text ?? "").join("").trim();
 
@@ -257,7 +258,10 @@ async function handleAsk(question: string, token: string) {
         break;
       }
 
-      contents.push({ role: "model", parts: [{ functionCall: functionCallPart.functionCall }] });
+      // gemini-3.6-flash(thinking 모델)는 functionCall part에 thought_signature를 같이 실어
+      // 보내는데, 이걸 대화 기록에 그대로 안 돌려주면 400 에러가 난다(실제 배포 후 확인됨).
+      // functionCall만 뽑아 재구성하지 말고 모델이 준 content를 통째로 그대로 돌려준다.
+      contents.push(modelContent);
       const args = functionCallPart.functionCall.args ?? {};
       if (args.analysis) usedAnalyses.add(String(args.analysis));
       const toolResult = await executeQueryData(args);
