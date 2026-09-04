@@ -14,6 +14,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const META_ACCESS_TOKEN = Deno.env.get("META_ACCESS_TOKEN")!;
 const SYNC_SHARED_SECRET = Deno.env.get("SYNC_SHARED_SECRET")!;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
+const GEMINI_MODEL = "gemini-3.6-flash";
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 const AD_ACCOUNT_ID = "act_545127089932186";
 
@@ -83,6 +85,75 @@ async function fetchPostInsights(mediaId: string, mediaProductType: string) {
   }
 }
 
+// Instagram의 media_url/thumbnail_url은 서명된 임시 링크라 며칠 지나면 만료된다(실제 확인:
+// 4개월 전 포스트 링크 403). 캡션만으로는 뭘 파는 포스트인지 애매한 경우가 있어(오너 지적,
+// 2026-09-04), 발행 직후 링크가 살아있을 때 Gemini Vision으로 한 번 설명을 뽑아 영구
+// 저장해둔다 — 링크가 나중에 죽어도 이 설명은 남는다. 과거(이미 링크 죽은) 포스트는
+// 소급 적용 안 함(오너 결정, "앞으로 그렇게 하고 이미 지난거는 놔둬").
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function visionSourceUrl(m: any): string | null {
+  // REELS/VIDEO는 media_url이 동영상 파일이라 정지 이미지인 thumbnail_url을 쓴다(비용·단순함).
+  if (m.media_product_type === "REELS" || m.media_type === "VIDEO") return m.thumbnail_url ?? null;
+  return m.media_url ?? m.thumbnail_url ?? null;
+}
+
+async function describePostImage(imageUrl: string | null): Promise<string | null> {
+  if (!imageUrl) return null;
+  try {
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) return null;
+    const mimeType = imgRes.headers.get("content-type") ?? "image/jpeg";
+    const bytes = new Uint8Array(await imgRes.arrayBuffer());
+    const base64 = bytesToBase64(bytes);
+    const body = {
+      contents: [{
+        role: "user",
+        parts: [
+          { text: "이 카페/베이커리 SNS 게시물 사진에 어떤 메뉴(음식·음료)가 나오는지 한국어로 한 문장으로 설명해줘. 메뉴 이름을 정확히 모르면 생김새를 구체적으로 묘사해줘. 사람/매장 인테리어 사진이면 그렇다고만 짧게 말해줘." },
+          { inlineData: { mimeType, data: base64 } },
+        ],
+      }],
+    };
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    );
+    if (!res.ok) {
+      console.error(`vision describe failed: ${res.status} ${await res.text()}`);
+      return null;
+    }
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("").trim();
+    return text || null;
+  } catch (err) {
+    console.error("describePostImage failed:", err);
+    return null;
+  }
+}
+
+async function fetchExistingDescriptions(postIds: string[]): Promise<Record<string, string | null>> {
+  const out: Record<string, string | null> = {};
+  for (let i = 0; i < postIds.length; i += 200) {
+    const chunk = postIds.slice(i, i + 200);
+    const filter = chunk.map((id) => `"${id}"`).join(",");
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/social_posts?select=post_id,ai_visual_description&post_id=in.(${filter})`,
+      { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    );
+    if (!res.ok) continue;
+    for (const row of await res.json()) out[row.post_id] = row.ai_visual_description ?? null;
+  }
+  return out;
+}
+
 async function syncAccountPosts(acc: typeof ACCOUNTS[number], sinceIso: string) {
   await ingest("social_accounts_ingest", [
     {
@@ -99,9 +170,13 @@ async function syncAccountPosts(acc: typeof ACCOUNTS[number], sinceIso: string) 
 
   const sinceTs = Math.floor(new Date(sinceIso).getTime() / 1000);
   const media = await graphGetPaginated(`${acc.igId}/media`, {
-    fields: "id,caption,media_type,media_product_type,media_url,permalink,timestamp,like_count,comments_count",
+    fields: "id,caption,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count",
     since: String(sinceTs),
   });
+
+  // 이미 설명을 뽑아둔 포스트는 재분석 안 함(idempotent, Vision 호출 낭비 방지) — since 창이
+  // 겹쳐서 같은 포스트가 여러 번 재조회돼도 한 번만 분석한다.
+  const existingDescriptions = await fetchExistingDescriptions(media.map((m: any) => m.id));
 
   const capturedDate = new Date().toISOString().slice(0, 10);
   const capturedAt = new Date().toISOString();
@@ -126,17 +201,22 @@ async function syncAccountPosts(acc: typeof ACCOUNTS[number], sinceIso: string) 
         } catch (err) {
           console.error(`comments failed for ${m.id}:`, err);
         }
-        return { m, insights, comments };
+        const existing = existingDescriptions[m.id];
+        const aiVisualDescription = existing !== undefined && existing !== null
+          ? existing
+          : await describePostImage(visionSourceUrl(m));
+        return { m, insights, comments, aiVisualDescription };
       }),
     );
 
-    const postRows = results.map(({ m }) => ({
+    const postRows = results.map(({ m, aiVisualDescription }) => ({
       platform: acc.platform,
       post_id: m.id,
       account_id: acc.igId,
       caption: m.caption ?? null,
       media_type: m.media_product_type ?? m.media_type,
       media_url: m.media_url ?? null,
+      ai_visual_description: aiVisualDescription,
       permalink: m.permalink ?? null,
       published_at: m.timestamp,
       product_tags: [],

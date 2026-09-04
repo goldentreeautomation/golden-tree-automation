@@ -73,3 +73,26 @@ DB를 직접 조회해 확인: `social_posts` 테이블의 캡션·날짜는 전
 
 프롬프트 지시만으로 환각을 100% 막을 수 있다는 보장은 없다 — 반복 사용하면서 계속 확인 필요.
 post_id 병기 요구가 사후 검증(오너가 캡션 대조)을 쉽게 만드는 게 실질적인 안전판.
+
+## 네 번째 발견: 포스트 사진/영상 AI 설명 추가 + CozyHaus 소셜 조회 무응답 버그
+
+오너가 "캡션이 애매하면 사진을 직접 보고 판단할 수 없냐"고 질문. 확인 결과 `social_posts.media_url`은
+Instagram의 서명된 임시 링크라 며칠 지나면 만료됨(실측: 4개월 전 포스트 403). 결정(오너, "앞으로
+그렇게 하고 이미 지난거는 놔둬"): 과거 포스트는 소급 안 하고, 앞으로 올라오는 포스트만 발행 직후
+Gemini Vision으로 설명을 뽑아 영구 저장.
+
+구현: `social_posts.ai_visual_description`(text) 추가(`0018`) — REELS는 `thumbnail_url`(정지
+이미지), FEED는 `media_url`을 Gemini Vision에 보내 한국어 설명 생성, `sync/meta`가 매 실행 시
+이미 설명이 있는 포스트는 재분석 안 함(idempotent). `analytics_dispatch`/상관관계 함수들에
+필드 노출, 봇 프롬프트엔 "캡션이 우선, 이건 보조"로 명시(`0019`).
+
+이 작업 중 **완전히 별개인 실제 버그를 발견**: `social_posts`/`social_ads`/`social_comments`가
+CozyHaus를 `lower(p_location_id) like '%cozy%'`로 판단하는데, 이건 캠페인명이 아니라 **호출자가
+넘긴 파라미터 자체**에 "cozy"가 들어있는지를 보는 조건이었다. Discord 봇은 실제 Square
+location_id(`L7DA0MBKD2X4P`)를 넘기므로 이 문자열엔 "cozy"가 없어 **CozyHaus를 지정한 모든
+소셜/광고 질문이 처음부터 조용히 빈 결과를 주고 있었다**(0001 버그 #1, 낮은 우선순위로 방치돼
+있던 것이 실제로 재현·확인됨). Bon Sushi와 같은 패턴(실제 location_id/계정ID/이름 명시 목록)으로
+수정(`0020`), 테스트로 CozyHaus 포스트/광고가 정상 반환됨을 확인.
+
+`meta-sync` v6, `discord-bot` v16 배포. 3일치로 실사용 테스트 — 이미지 포스트 3건 중 2건 정상
+설명 생성 확인(1건은 thumbnail 없음 등으로 null, 안전하게 저하).

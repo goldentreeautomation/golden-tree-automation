@@ -121,7 +121,7 @@ const ANALYSIS_DESCRIPTIONS = `- sales_summary: 특정 기간 매출 요약 (순
 - customer_retention: 신규/재방문 고객 비율
 - social_sales_correlation: 인스타 포스트 발행일 + 이후 3일간, 그날그날 매출을 "그 요일 최근 4주 평균"과 비교(day_offset 0~3). 요일 편중을 피하려고 포스팅 당일이 아니라 각 offset일 자체의 요일 기준으로 비교한다 (인과관계 아님, 상관관계만). "포스팅하면 매출 늘어?", "포스팅하고 며칠 뒤에 효과 나타나?" 류 질문에 사용
 - post_item_trend: 특정 메뉴를 다룬 포스트 발행 후 0~3일간 그 메뉴 매출 추이 (item_name 필수, 영어 메뉴명. "라떼 포스트 올리고 라떼 잘 팔렸어?" 류 질문)
-- social_posts: 인스타그램 포스트별 좋아요·댓글·공유·저장·도달 (limit로 개수 조절, item_name에 검색어 넣으면 캡션/태그 검색). 날짜는 published_date(America/Regina 현지 날짜) 필드를 써라 — published_at(UTC 원본시각)의 날짜 부분을 그대로 읽지 마라, 자정 근처 게시물은 하루 밀려서 틀린다
+- social_posts: 인스타그램 포스트별 좋아요·댓글·공유·저장·도달 (limit로 개수 조절, item_name에 검색어 넣으면 캡션/태그 검색). 날짜는 published_date(America/Regina 현지 날짜) 필드를 써라 — published_at(UTC 원본시각)의 날짜 부분을 그대로 읽지 마라, 자정 근처 게시물은 하루 밀려서 틀린다. ai_visual_description은 캡션이 애매할 때만 보조로 참고해라(2026-09-04부터 새로 올라오는 포스트만 있음, 과거 포스트는 null) — 그래도 caption이 있으면 caption을 우선해라
 - social_campaigns: 광고 캠페인 "목록·개수"만 (몇 개 있는지, 목적/상태별 집계). **금액·지출·성과 지표가 전혀 없다** — "캠페인 몇 개야" 류에만 사용
 - social_ads: 광고 캠페인별 지출·노출·클릭·CTR·CPC·results·**cost_per_result**(결과 1건당 비용). PAGE_LIKES 목적 캠페인의 results는 페이지 좋아요(팔로우) 수이므로 cost_per_result가 곧 "팔로우당 비용". 비용·성과·효율 비교는 전부 이거 — social_campaigns 아님
 - social_comments: 인스타그램 댓글 원문 (item_name에 검색어 넣으면 댓글 내용 검색). 날짜는 created_date(America/Regina 현지 날짜) 필드를 써라`;
