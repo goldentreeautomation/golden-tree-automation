@@ -22,6 +22,7 @@ const DISCORD_BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN")!;
 const DISCORD_APPLICATION_ID = Deno.env.get("DISCORD_APPLICATION_ID")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const GEMINI_MODEL = "gemini-3.6-flash";
+const SYNC_SHARED_SECRET = Deno.env.get("SYNC_SHARED_SECRET")!;
 
 const LOCATIONS: Record<string, string> = {
   "Bon Sushi": "LWEFT8C6SXJ7J",
@@ -48,6 +49,7 @@ const ALLOWED_ANALYSIS = [
   "social_campaigns",
   "social_ads",
   "social_comments",
+  "stock_status",
 ];
 
 function hexToBytes(hex: string): Uint8Array {
@@ -138,7 +140,8 @@ const ANALYSIS_DESCRIPTIONS = `- sales_summary: 특정 기간 매출 요약 (순
 - social_posts: 인스타그램 포스트별 좋아요·댓글·공유·저장·도달 (limit로 개수 조절, item_name에 검색어 넣으면 캡션/태그 검색). 날짜는 published_date(America/Regina 현지 날짜) 필드를 써라 — published_at(UTC 원본시각)의 날짜 부분을 그대로 읽지 마라, 자정 근처 게시물은 하루 밀려서 틀린다. ai_visual_description은 캡션이 애매할 때만 보조로 참고해라(2026-09-04부터 새로 올라오는 포스트만 있음, 과거 포스트는 null) — 그래도 caption이 있으면 caption을 우선해라
 - social_campaigns: 광고 캠페인 "목록·개수"만 (몇 개 있는지, 목적/상태별 집계). **금액·지출·성과 지표가 전혀 없다** — "캠페인 몇 개야" 류에만 사용
 - social_ads: 광고 캠페인별 지출·노출·클릭·CTR·CPC·results·**cost_per_result**(결과 1건당 비용). PAGE_LIKES 목적 캠페인의 results는 페이지 좋아요(팔로우) 수이므로 cost_per_result가 곧 "팔로우당 비용". 비용·성과·효율 비교는 전부 이거 — social_campaigns 아님
-- social_comments: 인스타그램 댓글 원문 (item_name에 검색어 넣으면 댓글 내용 검색). 날짜는 created_date(America/Regina 현지 날짜) 필드를 써라`;
+- social_comments: 인스타그램 댓글 원문 (item_name에 검색어 넣으면 댓글 내용 검색). 날짜는 created_date(America/Regina 현지 날짜) 필드를 써라
+- stock_status: 완제품 재고 현황(마카롱 등 통 단위로 트래킹하는 것들) — 마지막으로 센 시점 이후 생산량은 더하고 Square 판매량은 뺀 추정치. status(없음/거의없음/조금여유/보통/충분/기록없음), days_left(현재 속도로 며칠 버티는지) 포함. "지금 뭐 만들어야 돼", "마카롱 재고 어때" 류 질문에 사용. start_date/end_date는 이 analysis엔 의미 없으니 아무 날짜나(오늘) 채워라`;
 
 function queryDataTool() {
   return {
@@ -230,6 +233,116 @@ async function editFollowup(token: string, content: string) {
       body: JSON.stringify({ content }),
     },
   );
+}
+
+// 재고 트래킹(0021) — 완제품(마카롱 등) 통 단위 재고. 재료(레시피 원가)와 무관, 별개 기능.
+async function findStockItems(query: string): Promise<any[]> {
+  const params = new URLSearchParams({ select: "id,name,location_id,container_label" });
+  params.set("name", `ilike.*${query}*`);
+  const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/stock_items?${params}`, {
+    headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+  }, 10000);
+  if (!res.ok) throw new Error(`stock_items lookup failed: ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+async function insertStockEvent(stockItemId: number, eventType: string, containers: number, createdBy: string) {
+  const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/stock_events`, {
+    method: "POST",
+    headers: {
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify([{ stock_item_id: stockItemId, event_type: eventType, container_count: containers, created_by: createdBy }]),
+  }, 10000);
+  if (!res.ok) throw new Error(`stock_events insert failed: ${res.status} ${await res.text()}`);
+}
+
+async function handleStock(itemQuery: string, containers: number, eventType: string, createdBy: string, token: string) {
+  try {
+    const matches = await findStockItems(itemQuery);
+    if (matches.length === 0) {
+      await editFollowup(
+        token,
+        `"${itemQuery}"에 해당하는 재고 품목을 못 찾았습니다. 이름을 확인해주세요 — 새 품목이면 먼저 등록이 필요합니다(오너와 대화로 설정).`,
+      );
+      return;
+    }
+    if (matches.length > 1) {
+      const names = matches.map((m: any) => `- ${m.name}`).join("\n");
+      await editFollowup(token, `"${itemQuery}"에 여러 품목이 걸립니다. 더 정확히 말씀해주세요:\n${names}`);
+      return;
+    }
+    const item = matches[0];
+    await insertStockEvent(item.id, eventType, containers, createdBy);
+    const today = reginaTodayStr();
+    const overview = await rpc("analytics_dispatch", {
+      p_analysis: "stock_status",
+      p_start_date: today,
+      p_end_date: today,
+      p_location_id: item.location_id,
+      p_limit: 50,
+      p_compare_start: null,
+      p_compare_end: null,
+      p_item_name: null,
+    });
+    const status = (overview?.data ?? []).find((s: any) => s.name === item.name);
+    const label = eventType === "count" ? "카운트 기록" : "생산 추가";
+    const unit = item.container_label ?? "통";
+    let msg = `${item.name} ${label} 완료 (${containers}${unit}).`;
+    if (status) {
+      msg += `\n현재 추정: ${status.estimated_containers}${unit}(${status.estimated_units}개) · 상태: ${status.status}`;
+      if (status.days_left !== null && status.days_left !== undefined) msg += ` · 약 ${status.days_left}일분`;
+    }
+    await editFollowup(token, msg);
+  } catch (err) {
+    console.error(err);
+    await editFollowup(token, `재고 기록 중 오류: ${String(err).slice(0, 300)}`);
+  }
+}
+
+// 관리용 — Discord 슬래시 명령어 (재)등록. Discord 서명 검증 대상이 아니라 SYNC_SHARED_SECRET로
+// 보호한다. PUT은 목록 전체를 덮어쓰므로 기존 명령어(ask)도 항상 같이 포함해야 한다 —
+// 빠뜨리면 그 명령어가 삭제된다.
+async function registerSlashCommands() {
+  const commands = [
+    {
+      name: "ask",
+      description: "매출·소셜·광고 데이터에 대해 자연어로 질문합니다",
+      options: [{ name: "question", description: "질문 내용", type: 3, required: true }],
+    },
+    {
+      name: "stock",
+      description: "완제품 재고 기록 (카운트 또는 방금 만든 것 추가)",
+      options: [
+        { name: "item", description: "품목명 (예: 마카롱 피스타치오)", type: 3, required: true },
+        { name: "containers", description: "통 개수 (예: 1.5)", type: 10, required: true },
+        {
+          name: "type",
+          description: "count=지금 남은 걸 세서 기록 / production=방금 만든 것 추가",
+          type: 3,
+          required: true,
+          choices: [
+            { name: "카운트 (지금 남은 걸 셈)", value: "count" },
+            { name: "생산 (방금 만든 것 추가)", value: "production" },
+          ],
+        },
+      ],
+    },
+  ];
+  const res = await fetchWithTimeout(
+    `https://discord.com/api/v10/applications/${DISCORD_APPLICATION_ID}/commands`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bot ${DISCORD_BOT_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify(commands),
+    },
+    15000,
+  );
+  if (!res.ok) throw new Error(`command registration failed: ${res.status} ${await res.text()}`);
+  return res.json();
 }
 
 // query_data 도구 호출 1건을 실행한다. item_sales가 0건이면 modifier_sales로 자동 재시도하는
@@ -324,6 +437,16 @@ async function handleAsk(question: string, token: string) {
 }
 
 Deno.serve(async (req) => {
+  // 관리용: 슬래시 명령어 (재)등록. Discord 서명 검증 대상이 아니라서 먼저 분기한다.
+  if (req.method === "POST" && req.headers.get("x-sync-secret") === SYNC_SHARED_SECRET) {
+    try {
+      const result = await registerSlashCommands();
+      return new Response(JSON.stringify({ status: "success", result }), { headers: { "content-type": "application/json" } });
+    } catch (err) {
+      return new Response(JSON.stringify({ status: "error", message: String(err) }), { status: 500 });
+    }
+  }
+
   const rawBody = await req.text();
   const valid = await verifySignature(req, rawBody);
   if (!valid) return new Response("invalid signature", { status: 401 });
@@ -345,6 +468,22 @@ Deno.serve(async (req) => {
       if (claim?.claimed) {
         // @ts-ignore — Supabase Edge Runtime 전역, 응답 이후에도 백그라운드 작업을 이어간다
         EdgeRuntime.waitUntil(handleAsk(question, interaction.token));
+      }
+
+      return new Response(JSON.stringify({ type: 5 }), { headers: { "content-type": "application/json" } }); // DEFERRED
+    }
+
+    if (interaction.data?.name === "stock") {
+      const opts = interaction.data.options ?? [];
+      const itemQuery = opts.find((o: any) => o.name === "item")?.value ?? "";
+      const containers = Number(opts.find((o: any) => o.name === "containers")?.value ?? 0);
+      const eventType = opts.find((o: any) => o.name === "type")?.value ?? "count";
+      const createdBy = interaction.member?.user?.username ?? interaction.user?.username ?? "unknown";
+
+      const claim = await rpc("claim_discord_message", { p_message_id: `interaction:${interaction.id}` });
+      if (claim?.claimed) {
+        // @ts-ignore — Supabase Edge Runtime 전역
+        EdgeRuntime.waitUntil(handleStock(itemQuery, containers, eventType, createdBy, interaction.token));
       }
 
       return new Response(JSON.stringify({ type: 5 }), { headers: { "content-type": "application/json" } }); // DEFERRED

@@ -65,6 +65,14 @@ Discord를 거치지 않고 백엔드 코드가 이름으로 직접 부른다.
 
 `recipe_cost_current`(뷰)가 재료 단가 변경 시 실시간으로 원가율을 재계산한다. 상세 설계는 `docs/decisions/0011`(예정).
 
+## D. 완제품 재고 트래킹 (2026-09-06)
+
+| 함수 | 용도 |
+|---|---|
+| `analytics_stock_overview(p_location_id)` (dispatch: `stock_status`) | 마카롱 등 완제품 통 단위 재고 추정치 — 마지막 카운트 이후 생산 더하고 Square 판매량 뺀 값, 5단계 상태(없음/거의없음/조금여유/보통/충분) |
+
+기록은 Query Contract가 아니라 Discord `/stock` 슬래시 명령어(직접 `stock_events` insert)로 한다 — 쓰기는 이 계약 범위 밖(읽기 전용 규칙 #1은 조회 함수 대상). 상세: `docs/decisions/0014`.
+
 ## 사용되지 않는(고아) 함수 — 계약에서 제외
 
 아래는 DB엔 존재하지만 `analytics_dispatch`도, 대시보드도 호출하지 않는다. 레거시 또는 상위 버전으로 대체된 것들 — **새 코드에서 쓰지 말 것**. 정리(DROP)는 G4 대상이라 별도 승인 시 진행.
