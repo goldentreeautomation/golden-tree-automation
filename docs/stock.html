@@ -47,7 +47,7 @@
   }
   .brand { font-size: 13px; font-weight: 600; }
   .brand .dim { color: var(--muted); font-weight: 500; }
-  main { padding: 16px; max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  main { padding: 16px; max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
 
   #gate { max-width: 320px; margin: 80px auto; padding: 24px; background: var(--canvas); border-radius: var(--radius-card); box-shadow: var(--shadow-card); text-align: center; }
   #gate input { width: 100%; padding: 12px 14px; font-size: 16px; border: 1px solid var(--hairline); border-radius: var(--radius-md); margin: 12px 0; font-family: inherit; }
@@ -57,26 +57,32 @@
   .searchBar { position: sticky; top: 53px; z-index: 9; background: var(--surface-soft); padding: 4px 0 8px; }
   .searchBar input { width: 100%; padding: 11px 14px; font-size: 15px; border: 1px solid var(--hairline); border-radius: var(--radius-pill); font-family: inherit; background: var(--canvas); }
 
-  .item-card { background: var(--canvas); border: 1px solid var(--hairline-soft); box-shadow: var(--shadow-card); border-radius: var(--radius-card); padding: 16px; }
-  .item-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-  .item-name { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
-  .badge { flex-shrink: 0; font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-pill); white-space: nowrap; }
+  /* 표 형태 — 한눈에 보기 위함(오너 요청). 이름 열은 가로 스크롤 중에도 고정해서 어느
+     품목인지 항상 보이게 한다(모바일 좁은 화면에서도 표가 그대로 쓸모 있게). */
+  .tableWrap { background: var(--canvas); border: 1px solid var(--hairline-soft); box-shadow: var(--shadow-card); border-radius: var(--radius-card); overflow-x: auto; }
+  table.stock { border-collapse: collapse; width: 100%; font-size: 12.5px; white-space: nowrap; }
+  table.stock th, table.stock td { padding: 8px 10px; border-bottom: 1px solid var(--hairline-soft); text-align: left; }
+  table.stock th { position: sticky; top: 0; background: var(--canvas); font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; z-index: 2; }
+  table.stock td.nameCell, table.stock th.nameCell {
+    position: sticky; left: 0; background: var(--canvas); z-index: 1;
+    white-space: normal; min-width: 150px; max-width: 190px; font-weight: 600; font-size: 12.5px;
+    box-shadow: 1px 0 0 var(--hairline-soft);
+  }
+  table.stock th.nameCell { z-index: 3; }
+  table.stock tr:last-child td { border-bottom: none; }
+  table.stock .estCell { color: var(--stone); font-size: 12px; }
+  table.stock input { width: 56px; padding: 6px 7px; font-size: 12.5px; border: 1px solid var(--hairline); border-radius: 8px; font-family: inherit; }
+  table.stock button { padding: 6px 9px; font-size: 11.5px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: var(--ink); color: var(--canvas); margin-left: 4px; }
+  table.stock button.unitsBtn { background: var(--surface-soft); color: var(--ink); border: 1px solid var(--hairline); }
+  table.stock button.productionBtn { background: var(--positive-text); }
+  .cellGroup { display: flex; align-items: center; }
+  .badge { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 9px; border-radius: var(--radius-pill); white-space: nowrap; }
   .badge.충분 { background: var(--positive-bg); color: var(--positive-text); }
   .badge.보통 { background: var(--surface-soft); color: var(--stone); }
   .badge.조금여유 { background: var(--warn-bg); color: var(--warn-text); }
   .badge.거의없음, .badge.없음 { background: var(--negative-bg); color: var(--negative-text); }
   .badge.기록없음, .badge.알수없음 { background: var(--hairline-soft); color: var(--muted); }
-
-  .item-est { font-size: 12.5px; color: var(--stone); margin-top: 4px; }
-  .item-controls { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-  .ctrl-row { display: flex; gap: 6px; align-items: center; }
-  .ctrl-row label { font-size: 11px; color: var(--muted); width: 62px; flex-shrink: 0; }
-  .ctrl-row input { flex: 1; min-width: 0; padding: 8px 10px; font-size: 14px; border: 1px solid var(--hairline); border-radius: var(--radius-md); font-family: inherit; }
-  .ctrl-row button { flex-shrink: 0; padding: 8px 12px; font-size: 12.5px; font-weight: 600; border: none; border-radius: var(--radius-md); cursor: pointer; background: var(--ink); color: var(--canvas); }
-  .ctrl-row.units button { background: var(--surface-soft); color: var(--ink); border: 1px solid var(--hairline); }
-  .ctrl-row.count button { background: var(--ink); }
-  .ctrl-row.production button { background: var(--positive-text); }
-  .toast { font-size: 11.5px; color: var(--stone); min-height: 14px; margin-top: 4px; }
+  .toast { font-size: 10.5px; color: var(--stone); white-space: nowrap; }
 
   .loading, .error { text-align: center; color: var(--stone); padding: 60px 16px; font-size: 14px; }
   .error { color: var(--negative-text); }
@@ -121,47 +127,33 @@ async function apiCall(method, body) {
   return data;
 }
 
-function renderItem(item) {
+function renderRow(item) {
   const unit = item.container_label || '통';
   const est = item.last_count_at
-    ? `현재 추정: ${fmtNum(item.estimated_containers)}${unit}(${fmtNum(item.estimated_units)}개)` + (item.days_left !== null ? ` · 약 ${fmtNum(item.days_left)}일분` : '')
-    : '아직 카운트 기록 없음';
-  return '<div class="item-card" data-id="' + item.stock_item_id + '">' +
-    '<div class="item-head">' +
-      '<div class="item-name">' + item.name + '</div>' +
-      '<div class="badge ' + item.status + '">' + item.status + '</div>' +
-    '</div>' +
-    '<div class="item-est">' + est + '</div>' +
-    '<div class="item-controls">' +
-      '<div class="ctrl-row units">' +
-        '<label>통당개수</label>' +
-        '<input type="number" step="0.01" class="unitsInput" value="' + item.units_per_container + '" />' +
-        '<button class="saveUnitsBtn">저장</button>' +
-      '</div>' +
-      '<div class="ctrl-row count">' +
-        '<label>지금 ' + unit + '수</label>' +
-        '<input type="number" step="0.1" class="countInput" placeholder="예: 1.5" />' +
-        '<button class="countBtn">카운트</button>' +
-      '</div>' +
-      '<div class="ctrl-row production">' +
-        '<label>만든 ' + unit + '수</label>' +
-        '<input type="number" step="0.1" class="productionInput" placeholder="예: 2" />' +
-        '<button class="productionBtn">생산 추가</button>' +
-      '</div>' +
-      '<div class="toast"></div>' +
-    '</div>' +
-  '</div>';
+    ? `${fmtNum(item.estimated_containers)}${unit} (${fmtNum(item.estimated_units)}개)`
+    : '기록없음';
+  const days = item.days_left !== null && item.days_left !== undefined ? fmtNum(item.days_left) + '일' : '-';
+  return '<tr data-id="' + item.stock_item_id + '">' +
+    '<td class="nameCell">' + item.name + '</td>' +
+    '<td><span class="badge ' + item.status + '">' + item.status + '</span></td>' +
+    '<td class="estCell">' + est + '</td>' +
+    '<td class="estCell">' + days + '</td>' +
+    '<td><div class="cellGroup"><input type="number" step="0.01" class="unitsInput" value="' + item.units_per_container + '" /><button class="unitsBtn saveUnitsBtn">저장</button></div></td>' +
+    '<td><div class="cellGroup"><input type="number" step="0.1" class="countInput" placeholder="' + unit + '수" /><button class="countBtn">카운트</button></div></td>' +
+    '<td><div class="cellGroup"><input type="number" step="0.1" class="productionInput" placeholder="' + unit + '수" /><button class="productionBtn">생산</button></div></td>' +
+    '<td class="toast"></td>' +
+  '</tr>';
 }
 
 function attachHandlers(container) {
-  container.querySelectorAll('.item-card').forEach((card) => {
-    const id = Number(card.dataset.id);
-    const toast = card.querySelector('.toast');
+  container.querySelectorAll('tr[data-id]').forEach((row) => {
+    const id = Number(row.dataset.id);
+    const toast = row.querySelector('.toast');
     const setToast = (msg, isErr) => { toast.textContent = msg; toast.style.color = isErr ? 'var(--negative-text)' : 'var(--stone)'; };
 
-    card.querySelector('.saveUnitsBtn').addEventListener('click', async () => {
-      const v = parseFloat(card.querySelector('.unitsInput').value);
-      if (!v || v <= 0) return setToast('통당개수를 올바르게 입력하세요', true);
+    row.querySelector('.saveUnitsBtn').addEventListener('click', async () => {
+      const v = parseFloat(row.querySelector('.unitsInput').value);
+      if (!v || v <= 0) return setToast('올바른 값 입력', true);
       try {
         await apiCall('POST', { action: 'set_units', stock_item_id: id, units_per_container: v });
         setToast('저장됨');
@@ -169,25 +161,25 @@ function attachHandlers(container) {
       } catch (e) { setToast('실패: ' + e.message, true); }
     });
 
-    card.querySelector('.countBtn').addEventListener('click', async () => {
-      const input = card.querySelector('.countInput');
+    row.querySelector('.countBtn').addEventListener('click', async () => {
+      const input = row.querySelector('.countInput');
       const v = parseFloat(input.value);
-      if (isNaN(v) || v < 0) return setToast('통 수를 입력하세요', true);
+      if (isNaN(v) || v < 0) return setToast('통 수 입력', true);
       try {
         await apiCall('POST', { action: 'event', stock_item_id: id, event_type: 'count', container_count: v });
-        setToast('카운트 기록됨');
+        setToast('카운트됨');
         input.value = '';
         load();
       } catch (e) { setToast('실패: ' + e.message, true); }
     });
 
-    card.querySelector('.productionBtn').addEventListener('click', async () => {
-      const input = card.querySelector('.productionInput');
+    row.querySelector('.productionBtn').addEventListener('click', async () => {
+      const input = row.querySelector('.productionInput');
       const v = parseFloat(input.value);
-      if (isNaN(v) || v <= 0) return setToast('만든 통 수를 입력하세요', true);
+      if (isNaN(v) || v <= 0) return setToast('통 수 입력', true);
       try {
         await apiCall('POST', { action: 'event', stock_item_id: id, event_type: 'production', container_count: v });
-        setToast('생산 추가됨');
+        setToast('추가됨');
         input.value = '';
         load();
       } catch (e) { setToast('실패: ' + e.message, true); }
@@ -204,7 +196,12 @@ function renderList(filter) {
     content.innerHTML = '<div class="error">검색 결과가 없습니다</div>';
     return;
   }
-  content.innerHTML = items.map(renderItem).join('');
+  content.innerHTML =
+    '<div class="tableWrap"><table class="stock"><thead><tr>' +
+      '<th class="nameCell">품목</th><th>상태</th><th>추정</th><th>일수</th><th>통당개수</th><th>카운트</th><th>생산</th><th></th>' +
+    '</tr></thead><tbody>' +
+    items.map(renderRow).join('') +
+    '</tbody></table></div>';
   attachHandlers(content);
 }
 
@@ -213,6 +210,7 @@ async function load() {
   try {
     const data = await apiCall('GET');
     allItems = data.items || [];
+    content.className = '';
     renderList(document.getElementById('search').value);
   } catch (e) {
     if (e.message === 'UNAUTHORIZED') {
