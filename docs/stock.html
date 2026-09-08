@@ -49,32 +49,30 @@
   .brand .dim { color: var(--muted); font-weight: 500; }
   main { padding: 16px; max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
 
-  #gate { max-width: 320px; margin: 80px auto; padding: 24px; background: var(--canvas); border-radius: var(--radius-card); box-shadow: var(--shadow-card); text-align: center; }
-  #gate input { width: 100%; padding: 12px 14px; font-size: 16px; border: 1px solid var(--hairline); border-radius: var(--radius-md); margin: 12px 0; font-family: inherit; }
-  #gate button { width: 100%; padding: 12px; font-size: 15px; font-weight: 600; background: var(--ink); color: var(--canvas); border: none; border-radius: var(--radius-pill); cursor: pointer; }
-  #gateError { color: var(--negative-text); font-size: 13px; min-height: 18px; }
+  .toolbar { position: sticky; top: 53px; z-index: 9; background: var(--surface-soft); padding: 4px 0 8px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; }
+  .tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; flex: 1; }
+  .tab { padding: 7px 14px; font-size: 12.5px; font-weight: 600; border-radius: var(--radius-pill); border: 1px solid var(--hairline); background: var(--canvas); color: var(--stone); cursor: pointer; white-space: nowrap; }
+  .tab.active { background: var(--ink); color: var(--canvas); border-color: var(--ink); }
+  .bulkActions { display: flex; gap: 8px; }
+  .bulkActions button { padding: 9px 16px; font-size: 12.5px; font-weight: 700; border: none; border-radius: var(--radius-pill); cursor: pointer; color: var(--canvas); white-space: nowrap; }
+  #bulkCountBtn { background: var(--ink); }
+  #bulkProductionBtn { background: var(--positive-text); }
+  .bulkStatus { text-align: center; font-size: 12px; color: var(--stone); min-height: 16px; }
 
-  .searchBar { position: sticky; top: 53px; z-index: 9; background: var(--surface-soft); padding: 4px 0 8px; }
-  .searchBar input { width: 100%; padding: 11px 14px; font-size: 15px; border: 1px solid var(--hairline); border-radius: var(--radius-pill); font-family: inherit; background: var(--canvas); }
-
-  /* 표 형태 — 한눈에 보기 위함(오너 요청). 이름 열은 가로 스크롤 중에도 고정해서 어느
-     품목인지 항상 보이게 한다(모바일 좁은 화면에서도 표가 그대로 쓸모 있게). */
   .tableWrap { background: var(--canvas); border: 1px solid var(--hairline-soft); box-shadow: var(--shadow-card); border-radius: var(--radius-card); overflow-x: auto; }
   table.stock { border-collapse: collapse; width: 100%; font-size: 12.5px; white-space: nowrap; }
-  table.stock th, table.stock td { padding: 8px 10px; border-bottom: 1px solid var(--hairline-soft); text-align: left; }
+  table.stock th, table.stock td { padding: 9px 10px; border-bottom: 1px solid var(--hairline-soft); text-align: left; }
   table.stock th { position: sticky; top: 0; background: var(--canvas); font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; z-index: 2; }
   table.stock td.nameCell, table.stock th.nameCell {
     position: sticky; left: 0; background: var(--canvas); z-index: 1;
-    white-space: normal; min-width: 150px; max-width: 190px; font-weight: 600; font-size: 12.5px;
+    white-space: normal; min-width: 140px; max-width: 190px; font-weight: 600; font-size: 12.5px;
     box-shadow: 1px 0 0 var(--hairline-soft);
   }
   table.stock th.nameCell { z-index: 3; }
   table.stock tr:last-child td { border-bottom: none; }
   table.stock .estCell { color: var(--stone); font-size: 12px; }
-  table.stock input { width: 56px; padding: 6px 7px; font-size: 12.5px; border: 1px solid var(--hairline); border-radius: 8px; font-family: inherit; }
-  table.stock button { padding: 6px 9px; font-size: 11.5px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: var(--ink); color: var(--canvas); margin-left: 4px; }
-  table.stock button.unitsBtn { background: var(--surface-soft); color: var(--ink); border: 1px solid var(--hairline); }
-  table.stock button.productionBtn { background: var(--positive-text); }
+  table.stock input { width: 60px; padding: 6px 7px; font-size: 12.5px; border: 1px solid var(--hairline); border-radius: 8px; font-family: inherit; }
+  table.stock button { padding: 6px 9px; font-size: 11.5px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: var(--surface-soft); color: var(--ink); border: 1px solid var(--hairline); margin-left: 4px; }
   .cellGroup { display: flex; align-items: center; }
   .badge { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 9px; border-radius: var(--radius-pill); white-space: nowrap; }
   .badge.충분 { background: var(--positive-bg); color: var(--positive-text); }
@@ -90,25 +88,27 @@
 </style>
 </head>
 <body>
-<div id="gate">
-  <div class="brand">82 Bakeshop <span class="dim">· 재고 입력</span></div>
-  <input id="passcodeInput" type="password" placeholder="비밀번호" autocomplete="off" />
-  <button id="gateSubmit">입장</button>
-  <div id="gateError"></div>
-</div>
-
-<div id="app" hidden>
-  <header><div class="brand">82 Bakeshop <span class="dim">· 재고 입력</span></div></header>
-  <main>
-    <div class="searchBar"><input id="search" placeholder="품목 검색 (예: 마카롱, 쿠키)" /></div>
-    <div id="content" class="loading">불러오는 중...</div>
-  </main>
-</div>
+<header><div class="brand">82 Bakeshop <span class="dim">· 재고 입력</span></div></header>
+<main>
+  <div class="toolbar">
+    <div class="tabs" id="tabs"></div>
+    <div class="bulkActions">
+      <button id="bulkCountBtn">카운트 기록</button>
+      <button id="bulkProductionBtn">생산 추가</button>
+    </div>
+  </div>
+  <div class="bulkStatus" id="bulkStatus"></div>
+  <div id="content" class="loading">불러오는 중...</div>
+</main>
 
 <script>
 const API = 'https://stfiazhmznssyfsiaxvw.supabase.co/functions/v1/stock-entry-api';
-let passcode = '';
+// 개인별 로그인 없이 웹페이지 자체는 바로 들어오게 하되(오너 요청), API 호출엔 고정
+// 비밀번호를 자동으로 실어 보낸다 — 완전 공개보단 낫지만 진짜 보안은 아니다(눈속임 방지용).
+const PASSCODE = '342625';
 let allItems = [];
+let activeCategory = null;
+const STATUS_TIERS = ['충분','보통','조금여유','거의없음','없음'];
 
 function fmtNum(n) {
   if (n === null || n === undefined) return '-';
@@ -116,84 +116,98 @@ function fmtNum(n) {
 }
 
 async function apiCall(method, body) {
-  const res = await fetch(API + (method === 'GET' ? '' : ''), {
+  const res = await fetch(API, {
     method,
-    headers: { 'Content-Type': 'application/json', 'x-stock-passcode': passcode },
+    headers: { 'Content-Type': 'application/json', 'x-stock-passcode': PASSCODE },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (res.status === 401) throw new Error('UNAUTHORIZED');
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data;
 }
 
+function categoryOf(name) {
+  const idx = name.indexOf(' - ');
+  return idx === -1 ? name : name.slice(0, idx);
+}
+function variantOf(name) {
+  const idx = name.indexOf(' - ');
+  return idx === -1 ? name : name.slice(idx + 3);
+}
+
+// 실제 카운트 기록이 아직 없는 품목(전부 다 그럼, 오너가 통당개수를 아직 안 줌)은
+// "기록없음"만 계속 보여서 상태 배지가 어떻게 생겼는지 확인이 안 된다 — 오너 요청으로
+// 미리보기용 랜덤 값을 붙인다. DB엔 저장 안 하고 화면에만 보여준다.
+function withPreview(item) {
+  if (item.status !== '기록없음') return item;
+  const tier = STATUS_TIERS[Math.floor(Math.random() * STATUS_TIERS.length)];
+  const containers = Math.round(Math.random() * 3 * 100) / 100;
+  const days = Math.round(Math.random() * 5 * 10) / 10;
+  return Object.assign({}, item, {
+    status: tier,
+    estimated_containers: containers,
+    estimated_units: Math.round(containers * item.units_per_container),
+    days_left: days,
+    _preview: true,
+  });
+}
+
 function renderRow(item) {
   const unit = item.container_label || '통';
-  const est = item.last_count_at
+  const est = item.last_count_at || item._preview
     ? `${fmtNum(item.estimated_containers)}${unit} (${fmtNum(item.estimated_units)}개)`
     : '기록없음';
   const days = item.days_left !== null && item.days_left !== undefined ? fmtNum(item.days_left) + '일' : '-';
   return '<tr data-id="' + item.stock_item_id + '">' +
-    '<td class="nameCell">' + item.name + '</td>' +
+    '<td class="nameCell">' + variantOf(item.name) + (item._preview ? ' <span style="color:var(--muted);font-weight:400;">(예시)</span>' : '') + '</td>' +
     '<td><span class="badge ' + item.status + '">' + item.status + '</span></td>' +
     '<td class="estCell">' + est + '</td>' +
     '<td class="estCell">' + days + '</td>' +
-    '<td><div class="cellGroup"><input type="number" step="0.01" class="unitsInput" value="' + item.units_per_container + '" /><button class="unitsBtn saveUnitsBtn">저장</button></div></td>' +
-    '<td><div class="cellGroup"><input type="number" step="0.1" class="countInput" placeholder="' + unit + '수" /><button class="countBtn">카운트</button></div></td>' +
-    '<td><div class="cellGroup"><input type="number" step="0.1" class="productionInput" placeholder="' + unit + '수" /><button class="productionBtn">생산</button></div></td>' +
+    '<td><div class="cellGroup"><input type="number" step="0.01" class="unitsInput" value="' + item.units_per_container + '" /><button class="saveUnitsBtn">저장</button></div></td>' +
+    '<td><input type="number" step="0.1" class="countInput" placeholder="' + unit + '수" /></td>' +
+    '<td><input type="number" step="0.1" class="productionInput" placeholder="' + unit + '수" /></td>' +
     '<td class="toast"></td>' +
   '</tr>';
 }
 
-function attachHandlers(container) {
-  container.querySelectorAll('tr[data-id]').forEach((row) => {
-    const id = Number(row.dataset.id);
-    const toast = row.querySelector('.toast');
-    const setToast = (msg, isErr) => { toast.textContent = msg; toast.style.color = isErr ? 'var(--negative-text)' : 'var(--stone)'; };
-
-    row.querySelector('.saveUnitsBtn').addEventListener('click', async () => {
+function attachRowHandlers(container) {
+  container.querySelectorAll('.saveUnitsBtn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('tr');
+      const id = Number(row.dataset.id);
+      const toast = row.querySelector('.toast');
       const v = parseFloat(row.querySelector('.unitsInput').value);
-      if (!v || v <= 0) return setToast('올바른 값 입력', true);
+      if (!v || v <= 0) { toast.textContent = '올바른 값 입력'; toast.style.color = 'var(--negative-text)'; return; }
       try {
         await apiCall('POST', { action: 'set_units', stock_item_id: id, units_per_container: v });
-        setToast('저장됨');
+        toast.textContent = '저장됨'; toast.style.color = 'var(--stone)';
         load();
-      } catch (e) { setToast('실패: ' + e.message, true); }
-    });
-
-    row.querySelector('.countBtn').addEventListener('click', async () => {
-      const input = row.querySelector('.countInput');
-      const v = parseFloat(input.value);
-      if (isNaN(v) || v < 0) return setToast('통 수 입력', true);
-      try {
-        await apiCall('POST', { action: 'event', stock_item_id: id, event_type: 'count', container_count: v });
-        setToast('카운트됨');
-        input.value = '';
-        load();
-      } catch (e) { setToast('실패: ' + e.message, true); }
-    });
-
-    row.querySelector('.productionBtn').addEventListener('click', async () => {
-      const input = row.querySelector('.productionInput');
-      const v = parseFloat(input.value);
-      if (isNaN(v) || v <= 0) return setToast('통 수 입력', true);
-      try {
-        await apiCall('POST', { action: 'event', stock_item_id: id, event_type: 'production', container_count: v });
-        setToast('추가됨');
-        input.value = '';
-        load();
-      } catch (e) { setToast('실패: ' + e.message, true); }
+      } catch (e) { toast.textContent = '실패: ' + e.message; toast.style.color = 'var(--negative-text)'; }
     });
   });
 }
 
-function renderList(filter) {
+function renderTabs() {
+  const categories = [...new Set(allItems.map((i) => categoryOf(i.name)))];
+  if (!activeCategory) activeCategory = categories[0];
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = categories.map((c) =>
+    '<button class="tab' + (c === activeCategory ? ' active' : '') + '" data-cat="' + c + '">' + c + '</button>'
+  ).join('');
+  tabs.querySelectorAll('.tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activeCategory = btn.dataset.cat;
+      renderTabs();
+      renderTable();
+    });
+  });
+}
+
+function renderTable() {
   const content = document.getElementById('content');
-  const items = filter
-    ? allItems.filter((i) => i.name.toLowerCase().includes(filter.toLowerCase()))
-    : allItems;
+  const items = allItems.filter((i) => categoryOf(i.name) === activeCategory).map(withPreview);
   if (items.length === 0) {
-    content.innerHTML = '<div class="error">검색 결과가 없습니다</div>';
+    content.innerHTML = '<div class="error">품목이 없습니다</div>';
     return;
   }
   content.innerHTML =
@@ -202,8 +216,42 @@ function renderList(filter) {
     '</tr></thead><tbody>' +
     items.map(renderRow).join('') +
     '</tbody></table></div>';
-  attachHandlers(content);
+  attachRowHandlers(content);
 }
+
+async function bulkSubmit(eventType, inputClass, button) {
+  const bulkStatus = document.getElementById('bulkStatus');
+  const rows = document.querySelectorAll('#content tr[data-id]');
+  const jobs = [];
+  rows.forEach((row) => {
+    const input = row.querySelector('.' + inputClass);
+    if (!input || input.value.trim() === '') return; // 빈 칸은 건드리지 않음(오너 요청)
+    const v = parseFloat(input.value);
+    if (isNaN(v) || v < 0) return;
+    jobs.push({ id: Number(row.dataset.id), value: v, input });
+  });
+  if (jobs.length === 0) {
+    bulkStatus.textContent = '입력된 칸이 없습니다';
+    return;
+  }
+  button.disabled = true;
+  bulkStatus.textContent = jobs.length + '건 처리 중...';
+  try {
+    await Promise.all(jobs.map((j) =>
+      apiCall('POST', { action: 'event', stock_item_id: j.id, event_type: eventType, container_count: j.value })
+    ));
+    bulkStatus.textContent = jobs.length + '건 완료';
+    jobs.forEach((j) => { j.input.value = ''; });
+    load();
+  } catch (e) {
+    bulkStatus.textContent = '일부 실패: ' + e.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+document.getElementById('bulkCountBtn').addEventListener('click', (e) => bulkSubmit('count', 'countInput', e.target));
+document.getElementById('bulkProductionBtn').addEventListener('click', (e) => bulkSubmit('production', 'productionInput', e.target));
 
 async function load() {
   const content = document.getElementById('content');
@@ -211,45 +259,15 @@ async function load() {
     const data = await apiCall('GET');
     allItems = data.items || [];
     content.className = '';
-    renderList(document.getElementById('search').value);
+    renderTabs();
+    renderTable();
   } catch (e) {
-    if (e.message === 'UNAUTHORIZED') {
-      localStorage.removeItem('stock_passcode');
-      document.getElementById('app').hidden = true;
-      document.getElementById('gate').hidden = false;
-      document.getElementById('gateError').textContent = '비밀번호가 틀렸습니다';
-      return;
-    }
     content.className = 'error';
     content.textContent = '불러오지 못했습니다: ' + e.message;
   }
 }
 
-document.getElementById('search').addEventListener('input', (e) => renderList(e.target.value));
-
-async function tryEnter(code) {
-  passcode = code;
-  document.getElementById('gateError').textContent = '';
-  try {
-    await apiCall('GET');
-    localStorage.setItem('stock_passcode', code);
-    document.getElementById('gate').hidden = true;
-    document.getElementById('app').hidden = false;
-    load();
-  } catch (e) {
-    document.getElementById('gateError').textContent = '비밀번호가 틀렸습니다';
-  }
-}
-
-document.getElementById('gateSubmit').addEventListener('click', () => {
-  tryEnter(document.getElementById('passcodeInput').value);
-});
-document.getElementById('passcodeInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') tryEnter(document.getElementById('passcodeInput').value);
-});
-
-const saved = localStorage.getItem('stock_passcode');
-if (saved) tryEnter(saved);
+load();
 </script>
 </body>
 </html>
