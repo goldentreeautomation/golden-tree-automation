@@ -213,15 +213,27 @@ ${ANALYSIS_DESCRIPTIONS}
 }
 
 async function rpc(fn: string, args: Record<string, unknown>): Promise<any> {
-  const res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
-    method: "POST",
-    headers: {
-      apikey: SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(args),
-  }, 20000);
+  // 전체 기간("지금까지") 같은 넓은 범위 조회는 실측 20초를 넘기기도 한다(category_sales
+  // 전체 기간 실측 ~22초, 2026-09-08 오너 보고로 발견) — 20초는 너무 taut해서 정상적인
+  // 느린 조회까지 끊었다. 45초로 늘리되, 그래도 넘기면 원인을 명확히 알려줘서 Gemini가
+  // 기간을 좁혀 재시도하도록 유도한다(자체 시행착오 루프와 연동).
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: "POST",
+      headers: {
+        apikey: SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(args),
+    }, 45000);
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error(`조회가 45초를 넘겨 중단됐습니다 — 기간(start_date~end_date)이 너무 넓을 수 있습니다. 기간을 좁혀서 다시 시도하거나, 여러 구간으로 나눠 조회하세요.`);
+    }
+    throw err;
+  }
   if (!res.ok) throw new Error(`RPC ${fn} failed: ${res.status} ${await res.text()}`);
   return res.json();
 }
