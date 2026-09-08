@@ -50,6 +50,7 @@ const ALLOWED_ANALYSIS = [
   "social_ads",
   "social_comments",
   "stock_status",
+  "tax_summary",
 ];
 
 function hexToBytes(hex: string): Uint8Array {
@@ -141,7 +142,8 @@ const ANALYSIS_DESCRIPTIONS = `- sales_summary: 특정 기간 매출 요약 (순
 - social_campaigns: 광고 캠페인 "목록·개수"만 (몇 개 있는지, 목적/상태별 집계). **금액·지출·성과 지표가 전혀 없다** — "캠페인 몇 개야" 류에만 사용
 - social_ads: 광고 캠페인별 지출·노출·클릭·CTR·CPC·results·**cost_per_result**(결과 1건당 비용). PAGE_LIKES 목적 캠페인의 results는 페이지 좋아요(팔로우) 수이므로 cost_per_result가 곧 "팔로우당 비용". 비용·성과·효율 비교는 전부 이거 — social_campaigns 아님
 - social_comments: 인스타그램 댓글 원문 (item_name에 검색어 넣으면 댓글 내용 검색). 날짜는 created_date(America/Regina 현지 날짜) 필드를 써라
-- stock_status: 완제품 재고 현황(마카롱 등 통 단위로 트래킹하는 것들) — 마지막으로 센 시점 이후 생산량은 더하고 Square 판매량은 뺀 추정치. status(없음/거의없음/조금여유/보통/충분/기록없음), days_left(현재 속도로 며칠 버티는지) 포함. "지금 뭐 만들어야 돼", "마카롱 재고 어때" 류 질문에 사용. start_date/end_date는 이 analysis엔 의미 없으니 아무 날짜나(오늘) 채워라`;
+- stock_status: 완제품 재고 현황(마카롱 등 통 단위로 트래킹하는 것들) — 마지막으로 센 시점 이후 생산량은 더하고 Square 판매량은 뺀 추정치. status(없음/거의없음/조금여유/보통/충분/기록없음), days_left(현재 속도로 며칠 버티는지) 포함. "지금 뭐 만들어야 돼", "마카롱 재고 어때" 류 질문에 사용. start_date/end_date는 이 analysis엔 의미 없으니 아무 날짜나(오늘) 채워라
+- tax_summary: 기간별 매장별 GST/PST/Saskatchewan PST/LCT 세금액과 순매출. "세금 신고", "GST 얼마야", "PST 계산해줘" 류 질문에 사용. location_id는 무시되고 항상 두 매장 다 나온다. Bon Sushi는 주류 판매로 LCT가 추가로 있을 수 있다`;
 
 function queryDataTool() {
   return {

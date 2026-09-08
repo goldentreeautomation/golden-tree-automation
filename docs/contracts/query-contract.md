@@ -36,6 +36,7 @@ Discord 봇의 유일한 진입점. `p_analysis` 값에 따라 내부적으로 �
 | `monthly_sales` | `analytics_monthly_sales` | 월별 매출 | - |
 | `customer_retention` | `analytics_customer_retention` | 재방문 고객 비율 | - |
 | `category_sales` | `analytics_category_sales` | 카테고리별 매출 비중 | - |
+| `tax_summary` | `monthly_tax_summary` | 기간·매장별 GST/PST/Saskatchewan PST/LCT 세금액 + 순매출. `p_location_id` 무시(항상 양쪽 다 나옴) | - |
 | `social_sales_correlation` | `analytics_social_sales_correlation`(4-arg, `p_days_after=3` 고정) | 포스팅↔매출 상관관계, 발행일+1~3일 각각 같은 요일 4주 평균과 비교 | - |
 | `post_item_trend` | `analytics_post_item_sales_trend`(`p_days_after=3` 고정) | 특정 포스팅 태그/캡션과 매칭되는 품목의 발행 후 판매 추이 | `p_item_name` |
 | `social_posts` | (dispatch 내부 인라인 쿼리) | 포스팅 목록 + 최신 인게이지먼트 지표. 날짜는 `published_date`(America/Regina, generated column) 사용 — `published_at`(UTC)의 날짜를 직접 읽으면 자정 근처 게시물이 하루 밀린다 | - |

@@ -85,8 +85,16 @@ function normalizeOrder(o: any) {
   const tax = money(o.total_tax_money ?? o.net_amounts?.tax_money);
   const tip = money(o.total_tip_money ?? o.net_amounts?.tip_money);
   const discount = money(o.total_discount_money ?? o.net_amounts?.discount_money);
-  const net_sales = Math.round((total - tax - tip) * 100) / 100;
-  const gross_sales = Math.round((net_sales + discount) * 100) / 100;
+  // 기프트카드 판매는 매출이 아니다(선수금) — 회계 원칙이자 Square 자체 Sales Summary
+  // 리포트의 정의도 그렇다("Gift card sales"를 Net sales와 별도 항목으로 분리). 실제로 팔
+  // 때가 아니라 나중에 카드로 결제(디저트·스시로 교환)할 때가 진짜 매출이다. 오너가 Square
+  // 공식 리포트와 대조해서 발견함(docs/decisions/0009 계열, 2026-09-08) — 소급 수정 완료,
+  // 여기서는 앞으로 재발 방지.
+  const giftCardNetSales = (o.line_items ?? [])
+    .filter((li: any) => String(li.name ?? "").toLowerCase().includes("gift card"))
+    .reduce((sum: number, li: any) => sum + (money(li.gross_sales_money) - money(li.total_discount_money)), 0);
+  const net_sales = Math.max(0, Math.round((total - tax - tip - giftCardNetSales) * 100) / 100);
+  const gross_sales = Math.max(0, Math.round((net_sales + discount) * 100) / 100);
 
   const items = (o.line_items ?? []).map((li: any) => {
     const li_gross = money(li.gross_sales_money);
