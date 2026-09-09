@@ -9,15 +9,20 @@
 //
 // 지금 구현된 신호: 과거 실적(우리 Square 데이터), 날씨(Open-Meteo, 무료·키 불필요), 캘린더,
 // 지역행사(Ticketmaster Discovery API, 2026-09-09 추가 — 오너가 "라이더스 홈경기 때 사람
-// 많았다"고 실제 관찰한 게 계기, 상세 `docs/decisions/0020`). 라이더스 홈경기(Mosaic Stadium)
-// 를 가장 높게 가중, Brandt Centre(Regina Pats 등) 다음, 그 외 티켓 행사는 낮게. 동네 축제·
-// 파머스마켓처럼 티켓 없는 소규모 행사는 이 API에 안 잡히는 한계는 있음.
+// 많았다"고 실제 관찰한 게 계기, 상세 `docs/decisions/0020`. 백테스트로는 실제로 마이너스에
+// 가까웠음, `0021`). 라이더스 홈경기(Mosaic Stadium)를 가장 높게 가중, Brandt Centre(Regina
+// Pats 등) 다음, 그 외 티켓 행사는 낮게. 동네 축제·파머스마켓처럼 티켓 없는 소규모 행사는 이
+// API에 안 잡히는 한계는 있음. 소셜미디어(포스팅 반응·광고 집행 여부, 2026-09-09 추가,
+// `0021`) — 포스팅은 최근 7일(한 주) 안에 평소 대비 크게 반응 좋았던 게 있는지, 광고는
+// "터진 날"이 아니라 지금 집행 중인지를 계속 체크(둘 다 광고/포스팅 보고 며칠 뒤 방문하는
+// 경우를 놓치지 않기 위함).
 // 아직 미구현(항상 0, source_status에 "unavailable"로 표시, 신뢰도에 반영):
 //   검색관심도 — GSC는 이 프로젝트 범위 밖 (docs/decisions/0005, 코덱스 사이드 프로젝트 소관)
 //   도로/교통/대기질 — 조사 결과 서스캐처원은 고속도로 전용(시내 교통과 무관)이라 낮은 우선순위
 //
-// 학습(회귀 모델)은 여기 없다 — market_demand_outcomes에 실적이 8주/200건 이상 쌓이기 전엔
-// 의미가 없어서, 데이터 축적 인프라만 지금 만든다 (db/migrations 0009~0011).
+// 학습(회귀 모델)은 여기 없다 — 하지만 재료는 쌓기 시작했다: market_demand_outcomes에
+// 실측을 매일 기록하고(`sync/market-demand-outcomes`, `0021`), 과거 전체 기간도 소급
+// 적재했다. 표본이 충분히 쌓이면(수 개월) 이 규칙들을 실측 기반 가중치로 교체하는 게 목표.
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -223,28 +228,54 @@ function eventImpact(events: any[], dateStr: string): { impact: number; reasons:
   return { impact: Math.min(20, impact), reasons, count: todays.length };
 }
 
-// 소셜미디어 포스팅 신호 (2026-09-09 추가, 오너 요청) — "화요일 포스팅 퍼포먼스가 좋으면
-// 수요일 매출이 오를 가능성 있다"는 실제 마케팅 운영 경험을 반영. 기존 상관관계 로직(0008)의
-// day_offset 0~3 개념을 재사용해, 예측일 기준 최근 1~3일 안에 발행된 포스팅의 반응이 그
-// 계정 평소(트레일링 8주) 평균보다 크게 좋았는지 본다.
+// 소셜미디어 신호 (2026-09-09 추가, 오너 요청) — 두 갈래로 본다:
+// 1) 오가닉 포스팅: "화요일 포스팅 퍼포먼스가 좋으면 수요일 매출이 오를 가능성 있다"는 실제
+//    운영 경험 반영. 처음엔 상관관계 로직(0008)의 day_offset 0~3만 봤는데, 오너가 "평일에
+//    터진 게 주말까지 영향 있을 수 있다"고 지적(2026-09-09)해서 최근 7일(한 주)로 확장 —
+//    예측일 기준 최근 7일 안에 발행된 포스팅의 반응이 계정 평소(트레일링 8주) 대비 크게
+//    좋았는지 본다.
+// 2) 광고: "터진 날 기준"이 아니라 지금 캠페인이 살아있는지(active) 를 계속 체크한다 —
+//    광고 보고 "이번 주말에 가자"처럼 며칠 뒤 방문으로 이어질 수 있어서, 광고 집행 자체가
+//    지속되는 동안은 계속 영향권으로 본다(오너 지적, 2026-09-09).
 //
 // 주의: 라이더스 홈경기 백테스트에서 확인했듯 손으로 정한 가중치는 틀릴 수 있다 — 그래서 이
-// 값은 낮고 보수적으로(0~+10) 잡고, market_demand_outcomes에 데이터가 쌓이면 실측으로
+// 값들은 낮고 보수적으로(0~+10) 잡고, market_demand_outcomes에 데이터가 쌓이면 실측으로
 // 교체하는 걸 전제로 한다(`0021`).
 const SOCIAL_ACCOUNT_BY_BRAND: Record<string, string> = {
   LWEFT8C6SXJ7J: "17841478338651157", // Bon Sushi
   L7DA0MBKD2X4P: "17841472136242619", // CozyHaus
 };
+const SOCIAL_LOOKBACK_DAYS = 7; // day_offset 0~7 확장과 맞춤(0029)
+
+async function adActiveImpact(brandId: string, dateStr: string): Promise<{ impact: number; reasons: string[]; activeSpend: number }> {
+  const nameFilter = brandId === "LWEFT8C6SXJ7J" ? "bon" : "cozy";
+  const target = new Date(dateStr + "T00:00:00Z");
+  const start = new Date(target); start.setUTCDate(target.getUTCDate() - SOCIAL_LOOKBACK_DAYS);
+  const params = new URLSearchParams({
+    select: "spend,campaign_id,social_ad_campaigns!inner(campaign_name)",
+    metric_date: `gte.${toIsoDate(start)}`,
+  });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/social_ad_metrics?${params}&metric_date=lte.${dateStr}&social_ad_campaigns.campaign_name=ilike.*${nameFilter}*`, {
+    headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+  });
+  if (!res.ok) return { impact: 0, reasons: [], activeSpend: 0 };
+  const rows = await res.json();
+  const activeSpend = Array.isArray(rows) ? rows.reduce((sum: number, r: any) => sum + Number(r.spend ?? 0), 0) : 0;
+  if (activeSpend > 0) {
+    return { impact: 5, reasons: [`최근 ${SOCIAL_LOOKBACK_DAYS}일 내 광고 집행 중(지출 $${activeSpend.toFixed(0)})`], activeSpend };
+  }
+  return { impact: 0, reasons: [], activeSpend: 0 };
+}
 
 async function socialImpact(brandId: string, dateStr: string): Promise<{ impact: number; reasons: string[]; postCount: number; totalInteractions: number; highPerformer: boolean }> {
   const accountId = SOCIAL_ACCOUNT_BY_BRAND[brandId];
   if (!accountId) return { impact: 0, reasons: [], postCount: 0, totalInteractions: 0, highPerformer: false };
 
   const target = new Date(dateStr + "T00:00:00Z");
-  const recentStart = new Date(target); recentStart.setUTCDate(target.getUTCDate() - 3);
+  const recentStart = new Date(target); recentStart.setUTCDate(target.getUTCDate() - SOCIAL_LOOKBACK_DAYS);
   const recentEnd = new Date(target); recentEnd.setUTCDate(target.getUTCDate() - 1);
   const baselineStart = new Date(target); baselineStart.setUTCDate(target.getUTCDate() - 59);
-  const baselineEnd = new Date(target); baselineEnd.setUTCDate(target.getUTCDate() - 4);
+  const baselineEnd = new Date(target); baselineEnd.setUTCDate(target.getUTCDate() - (SOCIAL_LOOKBACK_DAYS + 1));
 
   const fetchPosts = async (start: string, end: string) => {
     const params = new URLSearchParams({
@@ -291,10 +322,10 @@ async function socialImpact(brandId: string, dateStr: string): Promise<{ impact:
   let highPerformer = false;
   if (baselineAvg && baselineAvg > 0 && recentMax > 0) {
     const ratio = recentMax / baselineAvg;
-    if (ratio >= 2) { impact = 10; highPerformer = true; reasons.push("최근 1~3일 내 반응이 평소보다 2배 이상 좋은 포스팅 있음"); }
-    else if (ratio >= 1.5) { impact = 6; highPerformer = true; reasons.push("최근 1~3일 내 반응이 평소보다 좋은 포스팅 있음"); }
+    if (ratio >= 2) { impact = 10; highPerformer = true; reasons.push(`최근 ${SOCIAL_LOOKBACK_DAYS}일 내 반응이 평소보다 2배 이상 좋은 포스팅 있음`); }
+    else if (ratio >= 1.5) { impact = 6; highPerformer = true; reasons.push(`최근 ${SOCIAL_LOOKBACK_DAYS}일 내 반응이 평소보다 좋은 포스팅 있음`); }
   }
-  if (recentPosts.length === 0) { impact = 0; reasons.push("최근 3일간 포스팅 없음"); }
+  if (recentPosts.length === 0) { impact = 0; reasons.push(`최근 ${SOCIAL_LOOKBACK_DAYS}일간 포스팅 없음`); }
 
   return { impact, reasons, postCount: recentPosts.length, totalInteractions: recentTotal, highPerformer };
 }
@@ -395,17 +426,24 @@ Deno.serve(async (req) => {
     const results: any[] = [];
     const socialByBrand: Record<string, Awaited<ReturnType<typeof socialImpact>>> = {};
     for (const brand of BRANDS) {
-      const soc = await socialImpact(brand.id, dateStr).catch((err) => {
-        console.error(`social signal failed for ${brand.id}:`, err);
-        return { impact: 0, reasons: [], postCount: 0, totalInteractions: 0, highPerformer: false };
-      });
+      const [soc, ad] = await Promise.all([
+        socialImpact(brand.id, dateStr).catch((err) => {
+          console.error(`social signal failed for ${brand.id}:`, err);
+          return { impact: 0, reasons: [], postCount: 0, totalInteractions: 0, highPerformer: false };
+        }),
+        adActiveImpact(brand.id, dateStr).catch((err) => {
+          console.error(`ad-active signal failed for ${brand.id}:`, err);
+          return { impact: 0, reasons: [], activeSpend: 0 };
+        }),
+      ]);
+      const socialImpactTotal = soc.impact + ad.impact;
       socialByBrand[brand.id] = soc;
 
       for (const period of PERIODS) {
         const hist = await historyImpact(brand.id, period, dateStr);
         const score = Math.max(
           0,
-          Math.min(100, Math.round(50 + hist.impact + w.impact + cal.impact + ev.impact + soc.impact)),
+          Math.min(100, Math.round(50 + hist.impact + w.impact + cal.impact + ev.impact + socialImpactTotal)),
         );
         const reasons = [
           ...hist.reasons.map((r) => ({ text: r, sign: hist.impact >= 0 ? "+" : "-" })),
@@ -413,7 +451,8 @@ Deno.serve(async (req) => {
           ...cal.reasons.map((r) => ({ text: r, sign: cal.impact >= 0 ? "+" : "-" })),
           ...ev.reasons.map((r) => ({ text: r, sign: "+" })),
           ...soc.reasons.map((r) => ({ text: r, sign: soc.impact > 0 ? "+" : "-" })),
-        ].slice(0, 6);
+          ...ad.reasons.map((r) => ({ text: r, sign: "+" })),
+        ].slice(0, 7);
 
         results.push({
           brand_id: brand.id,
@@ -422,13 +461,13 @@ Deno.serve(async (req) => {
           score,
           demand_band: scoreToBand(score),
           confidence: hist.sample_weeks >= 4 ? confidence : "low",
-          model_version: "rule-v3", // 소셜 신호 반영, 2026-09-09
+          model_version: "rule-v3", // 소셜(포스팅+광고) 신호 반영, 2026-09-09
           weather_impact: w.impact,
           event_impact: ev.impact,
           calendar_impact: cal.impact,
           search_impact: 0,
           operations_impact: hist.impact,
-          social_impact: soc.impact,
+          social_impact: socialImpactTotal,
           // jsonb 컬럼이므로 문자열로 stringify하면 안 된다 — 그러면 jsonb 안에 "JSON 텍스트"가
           // 그대로 들어가 이중 인코딩되고, 프론트에서 .map()이 실패한다(배열이 아니라 문자열이 됨).
           reasons,

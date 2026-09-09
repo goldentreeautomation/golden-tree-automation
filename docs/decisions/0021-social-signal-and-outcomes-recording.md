@@ -44,4 +44,11 @@
 
 ## 결과 (사후 기록)
 
-`market-demand` v9, `market-demand-outcomes` v1 배포. `market-demand-outcomes-daily` cron 등록(매일 04:15 Regina). 과거 전체 기간(2025-06-17~2026-09-08, 449일) 백필 실행 — 결과는 다음 업데이트에서 기록.
+`market-demand` v9, `market-demand-outcomes` v1 배포. `market-demand-outcomes-daily` cron 등록(매일 04:15 Regina). 과거 전체 기간(2025-06-17~2026-09-08, 449일) 백필 완료 — 449일 × 2매장 × 3구간 = 2,694건, 실패 0건.
+
+### 개정 (같은 날, 오너 추가 피드백)
+
+배포 직후 오너가 두 가지를 추가 지적:
+1. "평일에 터진 포스팅이 주말까지 영향 있을 수 있다. 1~3일로 국한하지 말자" — 상관관계 조회(`analytics_dispatch`의 `social_sales_correlation`/`post_item_trend`)와 `sync/market-demand`의 소셜 신호 lookback을 3일→7일(한 주)로 확장(`0029`). Discord 봇 프롬프트·주간 특이사항 문장 생성도 동일하게 갱신.
+2. "광고는 터진 날 기준이 아니라 지금 돌아가고 있는지를 계속 체크해야 한다" — `sync/market-demand`에 `adActiveImpact()` 추가: 최근 7일 내 해당 매장 광고 캠페인에 지출이 있으면(=지금 집행 중) 잠정 +5, 오가닉 포스팅 신호와는 별개로 계속 합산. 배포 후 실제로 본스시 활성 캠페인(지출 $55, 7일)을 정상 감지함을 확인.
+3. "예측보다 분석(왜 바빴는지)이 더 중요하다"는 오너의 방향성 확인 — 이 시스템의 "분석" 축(Discord `social_sales_correlation`, 주간 특이사항 문장)이 "예측" 축(시장 수요 점수)보다 우선순위가 높다는 걸 재확인. 둘 다 같은 상관관계 로직을 공유하므로 lookback 확장이 양쪽에 동시에 적용됨.

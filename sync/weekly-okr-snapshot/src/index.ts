@@ -140,9 +140,11 @@ async function callOpenAI(prompt: string): Promise<string> {
 // 로직(analytics_social_sales_correlation, 0008)의 실제 데이터만 근거로 쓰게 한다. "그날
 // 포스팅→그날 매출"식 당일 단순 인과는 명시적으로 금지(오너가 나쁜 예로 지적, 2026-09-08).
 async function buildAnomalyNote(locationId: string, locationName: string, start: string, end: string, dailySales: any[]): Promise<string> {
-  // 지난주 포스팅 + 그 이후 최대 3일 지연효과까지 보려면 상관관계 조회 범위를 3일 더 넓힌다.
+  // 지난주 포스팅 + 그 이후 최대 7일(한 주) 지연효과까지 보려면 상관관계 조회 범위를 넓힌다.
+  // "평일 포스팅이 주말 매출에 영향 줄 수 있다"는 오너 관찰(2026-09-09)로 3일→7일 확장 —
+  // analytics_dispatch의 social_sales_correlation 자체도 이제 day_offset 0~7로 계산한다(0029).
   const lookbackEnd = new Date(end + "T00:00:00Z");
-  lookbackEnd.setUTCDate(lookbackEnd.getUTCDate() + 3);
+  lookbackEnd.setUTCDate(lookbackEnd.getUTCDate() + 7);
   // rpc()가 재시도까지 실패하면 여기서 명시적으로 실패를 구분해둔다 — 예전엔 이걸 조용히
   // null로 삼켜서, Gemini가 "포스팅이 없어서 원인을 모르겠다"는 식으로 **실제로는 포스팅이
   // 있었는데 조회에 실패했을 뿐인 상황**을 잘못 단정해버리는 사고가 있었다(오너 발견,
@@ -173,9 +175,9 @@ ${JSON.stringify(correlation)}`;
 
 규칙(반드시 지킬 것):
 - 주어진 데이터에 없는 내용을 상상해서 쓰지 마라. 근거가 부족하면 "뚜렷한 원인은 안 보인다"고 써라.
-- 포스팅과 매출의 인과관계는 "포스팅 당일" 하나만 보지 마라. 실제로 반응은 발행 후 1~3일 뒤
-  또는 다음 주말에 나타나는 경우가 많다 — 아래 correlation 데이터의 day_offset(0~3)을 참고해서
-  판단해라.
+- 포스팅과 매출의 인과관계는 "포스팅 당일" 하나만 보지 마라. 실제로 반응은 발행 후 1~7일(한 주)
+  뒤에 나타나는 경우가 많고, 특히 평일에 올린 포스팅이 그 주 주말 매출로 이어지는 경우가 있다 —
+  아래 correlation 데이터의 day_offset(0~7)을 참고해서 판단해라.
 - 특정 포스팅을 언급할 땐 post_id를 괄호로 표기해라(확인 가능하게).
 - 과장하지 말고 담백하게, 회의에서 바로 읽을 수 있는 톤으로.
 
