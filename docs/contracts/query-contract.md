@@ -14,14 +14,14 @@
 
 | 경로 | 호출자 | 방식 |
 |---|---|---|
-| A. LLM 라우팅 | Discord `/ask` (`runtime/discord/`) | 자연어 질문 → Gemini가 `p_analysis` 값 선택 → **`analytics_dispatch` 하나만 호출** |
+| A. LLM 라우팅 | Discord `/ask` (`runtime/discord/`) | 자연어 질문 → LLM(`gpt-5.6-luna`, `0019`)이 `p_analysis` 값 선택 → **`analytics_dispatch` 하나만 호출** |
 | B. 직접 호출 | `web/dashboard-api/`, `sync/market-demand/` | 코드가 필요한 `analytics_*` 함수를 이름으로 직접 호출(라우팅 없음) |
 
 ## A. `analytics_dispatch(p_analysis, p_start_date, p_end_date, p_location_id, p_limit, p_compare_start, p_compare_end, p_item_name)`
 
 Discord 봇의 유일한 진입점. `p_analysis` 값에 따라 내부적으로 아래 함수 중 하나로 라우팅한다. 날짜 범위는 최대 730일(단, `social_campaigns`는 예외 없음).
 
-**호출 방식(2026-09-04 변경)**: Discord 봇은 더 이상 "질문당 1번"만 호출하지 않는다. Gemini function calling으로 `query_data`(=`analytics_dispatch` 래퍼) 도구를 노출하고, 복잡한 질문(예: 매출 비교+SNS 연관 분석처럼 여러 데이터가 필요한 질문)이면 최대 5번까지 반복 호출해 데이터를 모은 뒤 답한다. 여러 번 호출해도 `analytics_dispatch` 밖으로는 못 나간다 — `analysis` 값은 매 호출마다 서버가 `ALLOWED_ANALYSIS`로 재검증한다. 상세: `docs/decisions/0013`.
+**호출 방식(2026-09-04 변경, 2026-09-09 Gemini→OpenAI 전환은 `0019`)**: Discord 봇은 더 이상 "질문당 1번"만 호출하지 않는다. Function calling으로 `query_data`(=`analytics_dispatch` 래퍼) 도구를 노출하고, 복잡한 질문(예: 매출 비교+SNS 연관 분석처럼 여러 데이터가 필요한 질문)이면 최대 5번까지 반복 호출해 데이터를 모은 뒤 답한다. 여러 번 호출해도 `analytics_dispatch` 밖으로는 못 나간다 — `analysis` 값은 매 호출마다 서버가 `ALLOWED_ANALYSIS`로 재검증한다. 상세: `docs/decisions/0013`.
 
 | p_analysis | 내부 함수 | 용도 | 필수 파라미터 |
 |---|---|---|---|
