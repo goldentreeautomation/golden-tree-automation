@@ -177,13 +177,20 @@ function agentSystemPrompt(today: string): string {
 너는 query_data 도구로 데이터를 조회할 수 있다. 도구가 지원하는 analysis 종류:
 ${ANALYSIS_DESCRIPTIONS}
 
-**여러 번 호출해도 된다.** 질문이 복잡하면(예: "5~8월 매출 비교하고 SNS 업로드 현황이랑 연관 있는지 봐줘")
-필요한 데이터를 여러 번 나눠서 가져와라 — 예: daily_sales를 5~8월 범위로 한 번, social_posts를 같은
-범위로 한 번, 이렇게 모은 다음 네가 직접 종합해서 분석해라. 월별 최고/최저 매출일이나 날짜별 평균처럼
-집계가 필요한 계산은 daily_sales/monthly_sales로 받은 원자료를 놓고 네가 직접 계산해라(데이터가 없는데
-숫자를 지어내지 마라). location_id는 "LWEFT8C6SXJ7J"(Bon Sushi)/"L7DA0MBKD2X4P"(CozyHaus) 중 하나 또는
-생략(전체). "이번주"는 이번주 월요일~오늘, "지난주"는 지난주 월~일, "오늘"은 오늘 하루, "이번달"은
-이번달 1일~오늘.
+**여러 번 호출해도 된다. 하지만 도구 호출은 최대 6번뿐이니 아껴 써라.** 질문이 복잡하면(예: "5~8월
+매출 비교하고 SNS 업로드 현황이랑 연관 있는지 봐줘") 필요한 데이터를 여러 번 나눠서 가져와라 — 예:
+daily_sales를 5~8월 범위로 한 번, social_posts를 같은 범위로 한 번, 이렇게 모은 다음 네가 직접
+종합해서 분석해라. 월별 최고/최저 매출일이나 날짜별 평균처럼 집계가 필요한 계산은 daily_sales/
+monthly_sales로 받은 원자료를 놓고 네가 직접 계산해라(데이터가 없는데 숫자를 지어내지 마라).
+
+**절대 하지 말아야 할 것: 날짜 하나하나마다 따로 호출하기.** 예를 들어 "매출 3000불 넘은 날들과
+이유"처럼 "여러 날짜를 찾고 각각 이유를 설명"해야 하는 질문이면, (1) daily_sales를 전체 기간 **한 번만**
+호출해서 조건에 맞는 날짜들을 네가 직접 걸러내고, (2) social_posts나 social_sales_correlation도
+그 날짜들을 포함하는 **넓은 기간으로 한 번만** 호출해서, 그 안에서 날짜별로 대조해라. 찾은 날짜가
+3개든 10개든 그 개수만큼 도구를 반복 호출하지 마라 — 호출 횟수를 다 쓰고 답을 못 낼 위험이 크다.
+
+location_id는 "LWEFT8C6SXJ7J"(Bon Sushi)/"L7DA0MBKD2X4P"(CozyHaus) 중 하나 또는 생략(전체).
+"이번주"는 이번주 월요일~오늘, "지난주"는 지난주 월~일, "오늘"은 오늘 하루, "이번달"은 이번달 1일~오늘.
 
 데이터를 충분히 모았으면 도구 호출을 멈추고 한국어로 최종 답을 써라. 반드시 지켜야 할 것:
 - 데이터에 없는 숫자를 지어내지 마라. JSON 안의 숫자로 직접 계산(합계·평균·최대/최소 등)하는 건 괜찮다
@@ -387,7 +394,7 @@ async function executeQueryData(args: any): Promise<any> {
   return result;
 }
 
-const MAX_TOOL_CALLS = 6;
+const MAX_TOOL_CALLS = 8;
 
 async function handleAsk(question: string, token: string) {
   try {
