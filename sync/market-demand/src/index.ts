@@ -54,15 +54,43 @@ const SK_HOLIDAYS_2026: Record<string, string> = {
   "2026-12-25": "Christmas Day",
   "2026-12-26": "Boxing Day",
 };
-// 디저트/카페 수요에 특히 영향 있는 날 (요일 무관 고정일)
-const SPECIAL_DEMAND_DATES: Record<string, string> = {
-  "2026-02-14": "Valentine's Day",
-  "2026-05-10": "Mother's Day",
-  "2026-06-21": "Father's Day",
-  "2026-10-31": "Halloween",
-  "2026-12-24": "Christmas Eve",
-  "2026-12-31": "New Year's Eve",
+// 공휴일·기념일 영향 — 매장별로 백테스트한 실측값 (오너 요청, 2026-09-09).
+// 예전엔 "공휴일이면 +6, 특별한 날이면 +8"처럼 매장 구분 없이 감으로 넣었는데, 실제로
+// 대조해보니 매장마다 반응이 다르고(새해전야: 본스시 +137%/코지 +13%) 방향이 반대인 경우도
+// 있었다(핼러윈: 코지 -20.6% — 예전 코드는 +로 가정했었음, 틀렸던 걸 이번에 뒤집음).
+// 값은 2025-06~2026-09 데이터로 1회 대조한 결과라 표본이 대부분 1개뿐이다(축제성 다일 행사는
+// 날짜별 변동이 커서 이번엔 제외 — Craven/퀸시티엑스). 표에 없는 날짜는 0(중립) — 검증 전까지
+// 감으로 채우지 않는다. 연도가 바뀌면(움직이는 공휴일 특히) 날짜를 갱신해야 한다.
+const VERIFIED_DATE_IMPACT: Record<string, { label: string; bonSushi: number; cozyHaus: number }> = {
+  "2026-01-01": { label: "새해", bonSushi: 5, cozyHaus: 5 },
+  "2026-02-14": { label: "발렌타인데이", bonSushi: 10, cozyHaus: 10 },
+  "2026-02-16": { label: "패밀리 데이", bonSushi: 0, cozyHaus: 7 },
+  "2026-04-03": { label: "굿프라이데이", bonSushi: 5, cozyHaus: -5 },
+  "2026-04-05": { label: "부활절", bonSushi: -9, cozyHaus: -7 },
+  "2026-05-10": { label: "어버이날", bonSushi: 10, cozyHaus: 9 },
+  "2026-05-18": { label: "빅토리아 데이", bonSushi: 0, cozyHaus: -5 },
+  "2026-06-21": { label: "아버지날", bonSushi: 7, cozyHaus: 5 },
+  "2026-07-01": { label: "캐나다 데이", bonSushi: 10, cozyHaus: 10 },
+  "2026-08-03": { label: "서스캐처원 데이", bonSushi: 4, cozyHaus: -3 },
+  "2026-09-07": { label: "레이버 데이", bonSushi: -8, cozyHaus: -3 },
+  "2026-10-12": { label: "추수감사절", bonSushi: 7, cozyHaus: -3 },
+  "2026-10-31": { label: "핼러윈", bonSushi: 0, cozyHaus: -8 },
+  "2026-11-11": { label: "리멤버런스 데이", bonSushi: 0, cozyHaus: 6 },
+  "2026-11-27": { label: "블랙프라이데이", bonSushi: 0, cozyHaus: -4 },
+  "2026-11-30": { label: "사이버먼데이", bonSushi: 0, cozyHaus: 5 },
+  "2026-12-24": { label: "크리스마스이브", bonSushi: 6, cozyHaus: 10 },
+  "2026-12-25": { label: "크리스마스", bonSushi: -10, cozyHaus: -10 }, // 양쪽 다 거의 휴업 수준
+  "2026-12-26": { label: "박싱데이", bonSushi: -9, cozyHaus: 0 },
+  "2026-12-31": { label: "새해전야", bonSushi: 10, cozyHaus: 4 },
 };
+
+function verifiedDateImpact(brandId: string, dateStr: string): { impact: number; reasons: string[] } {
+  const v = VERIFIED_DATE_IMPACT[dateStr];
+  if (!v) return { impact: 0, reasons: [] };
+  const impact = brandId === "LWEFT8C6SXJ7J" ? v.bonSushi : v.cozyHaus;
+  if (impact === 0) return { impact: 0, reasons: [] };
+  return { impact, reasons: [`${v.label}(실측 확인)`] };
+}
 
 // 개학 시즌(오너 요청, 2026-09-09 — "back to school week historically -6%" 같은 계절 패턴도
 // 반영해달라고 함) — 감으로 넣지 않고 실제 데이터로 백테스트함(2025·2026 Regina Public
@@ -171,7 +199,6 @@ function calendarImpact(dateStr: string): { impact: number; reasons: string[]; f
   const dow = d.getUTCDay(); // 날짜 문자열만 쓰므로 UTC 파싱해도 날짜는 동일
   const isWeekend = dow === 0 || dow === 6;
   const holiday = SK_HOLIDAYS_2026[dateStr];
-  const special = SPECIAL_DEMAND_DATES[dateStr];
   const day = d.getUTCDate();
   const lastDayOfMonth = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
   const isMonthStart = day <= 3;
@@ -179,11 +206,12 @@ function calendarImpact(dateStr: string): { impact: number; reasons: string[]; f
   const month = d.getUTCMonth() + 1;
   const season = month >= 12 || month <= 2 ? "winter" : month <= 5 ? "spring" : month <= 8 ? "summer" : "fall";
 
+  // 공휴일/기념일 자체의 영향은 여기서 더하지 않는다 — 매장마다 반응이 다르고 방향이 반대인
+  // 경우도 있어서(2026-09-09 백테스트) verifiedDateImpact()가 매장별로 따로 계산한다.
+  // 여기(calendarImpact)는 이제 요일(주말)과 계절/월초말 같은 매장 공통 신호만 담당한다.
   let impact = 0;
   const reasons: string[] = [];
   if (isWeekend) { impact += 5; reasons.push("주말"); }
-  if (holiday) { impact += 6; reasons.push(`공휴일: ${holiday}`); }
-  if (special) { impact += 8; reasons.push(`특별한 날: ${special}`); }
   impact = Math.max(-10, Math.min(10, impact));
 
   return {
@@ -192,7 +220,7 @@ function calendarImpact(dateStr: string): { impact: number; reasons: string[]; f
     features: {
       is_weekend: isWeekend, is_holiday: !!holiday, holiday_name: holiday ?? null,
       is_school_break: false, is_month_start: isMonthStart, is_month_end: isMonthEnd,
-      special_date: special ?? null, season,
+      special_date: VERIFIED_DATE_IMPACT[dateStr]?.label ?? null, season,
     },
   };
 }
@@ -463,7 +491,8 @@ Deno.serve(async (req) => {
       const socialImpactTotal = soc.impact + ad.impact;
       socialByBrand[brand.id] = soc;
       const bts = backToSchoolImpact(brand.id, dateStr);
-      const calImpactTotal = cal.impact + bts.impact;
+      const verified = verifiedDateImpact(brand.id, dateStr);
+      const calImpactTotal = cal.impact + bts.impact + verified.impact;
 
       for (const period of PERIODS) {
         const hist = await historyImpact(brand.id, period, dateStr);
@@ -476,10 +505,11 @@ Deno.serve(async (req) => {
           ...w.reasons.map((r) => ({ text: r, sign: w.impact >= 0 ? "+" : "-" })),
           ...cal.reasons.map((r) => ({ text: r, sign: cal.impact >= 0 ? "+" : "-" })),
           ...bts.reasons.map((r) => ({ text: r, sign: bts.impact >= 0 ? "+" : "-" })),
+          ...verified.reasons.map((r) => ({ text: r, sign: verified.impact >= 0 ? "+" : "-" })),
           ...ev.reasons.map((r) => ({ text: r, sign: "+" })),
           ...soc.reasons.map((r) => ({ text: r, sign: soc.impact > 0 ? "+" : "-" })),
           ...ad.reasons.map((r) => ({ text: r, sign: "+" })),
-        ].slice(0, 7);
+        ].slice(0, 8);
 
         results.push({
           brand_id: brand.id,
@@ -488,7 +518,7 @@ Deno.serve(async (req) => {
           score,
           demand_band: scoreToBand(score),
           confidence: hist.sample_weeks >= 4 ? confidence : "low",
-          model_version: "rule-v4", // 개학 시즌(브랜드별 백테스트) 반영, 2026-09-09
+          model_version: "rule-v5", // 공휴일/기념일 매장별 백테스트 반영, 2026-09-09
           weather_impact: w.impact,
           event_impact: ev.impact,
           calendar_impact: calImpactTotal,
