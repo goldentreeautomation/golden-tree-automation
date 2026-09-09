@@ -74,9 +74,12 @@ async function fetchPage(baseUrl: string, key: string, table: string, offset: nu
   return res.json();
 }
 
+// count=exact는 order_items(18만+ 행)처럼 큰 테이블에서 실제로 statement timeout(57014)이
+// 났다 — planner 통계 기반의 count=estimated로 바꾼다. 검증 목적("대략 맞는지")엔 충분하고,
+// 매번 무거운 전체 스캔을 돌리지 않아도 된다.
 async function countRows(baseUrl: string, key: string, table: string): Promise<number> {
   const res = await fetch(`${baseUrl}/rest/v1/${table}?select=*&limit=1`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}`, Prefer: "count=exact" },
+    headers: { apikey: key, Authorization: `Bearer ${key}`, Prefer: "count=estimated" },
   });
   if (!res.ok) throw new Error(`count ${table} failed: ${res.status} ${await res.text()}`);
   const range = res.headers.get("content-range");
@@ -177,7 +180,10 @@ async function verifyBackup(label: string) {
   for (const t of tablesFor(label)) {
     const backupCount = manifest.row_counts?.[t] ?? -1;
     const liveCount = await countRows(self.baseUrl, self.key, t);
-    if (liveCount !== -1 && backupCount !== liveCount) mismatches[t] = { backup: backupCount, live: liveCount };
+    // count=estimated는 planner 통계 기반 근사치라 정확히 일치하지 않는다 — 절대 오차 50 또는
+    // 5% 중 큰 쪽까지는 정상으로 본다. 그보다 크게 벌어지면 진짜 이상 신호.
+    const tolerance = Math.max(50, liveCount * 0.05);
+    if (liveCount !== -1 && Math.abs(backupCount - liveCount) > tolerance) mismatches[t] = { backup: backupCount, live: liveCount };
   }
   return {
     label,
