@@ -1,27 +1,32 @@
 // Golden Tree — Discord 런타임 봇 (W4, docs/golden-tree-design.md)
 //
-// 흐름 (2026-09-04, Gemini function calling으로 재구성): 슬래시 명령 수신 → Gemini에게
-// query_data 도구를 쥐어주고 루프를 돈다 — 질문이 복잡하면(예: "매출 비교하고 SNS 업로드
-// 현황이랑 연관 봐줘") 여러 번 나눠서 호출해 필요한 데이터를 전부 모은 뒤 최종 답을 쓴다
-// (MAX_TOOL_CALLS로 상한). 전엔 "질문→JSON 1개→함수 1번 호출→답변"으로 고정이라 여러
-// 데이터가 필요한 질문에 답을 못 했다(오너/매니저 피드백).
+// 흐름 (2026-09-04, function calling으로 재구성 / 2026-09-09 Gemini→OpenAI 교체): 슬래시
+// 명령 수신 → LLM에게 query_data 도구를 쥐어주고 루프를 돈다 — 질문이 복잡하면(예: "매출
+// 비교하고 SNS 업로드 현황이랑 연관 봐줘") 여러 번 나눠서 호출해 필요한 데이터를 전부 모은
+// 뒤 최종 답을 쓴다(MAX_TOOL_CALLS로 상한). 전엔 "질문→JSON 1개→함수 1번 호출→답변"으로
+// 고정이라 여러 데이터가 필요한 질문에 답을 못 했다(오너/매니저 피드백).
+//
+// **2026-09-09 Gemini→OpenAI 교체**: Gemini 무료 티어가 하루 20건 한도로 자주 막히고,
+// 그 API 특유의 wire-format 버그(role 이름, thought_signature 누락 시 400 등)를 여러 번
+// 겪었다(오너 결정 — 유료 GPT 계정 이미 보유, 안정성 우선). OpenAI Chat Completions API의
+// 표준 tool-calling 형식(tool_calls/role:"tool"/tool_call_id)으로 옮김 — Gemini 특유의
+// 특수 처리(functionCall thought_signature 보존, role:"user"로 우회 등)가 전부 불필요해짐.
 //
 // 이 파일이 곧 "runtime/router/"의 역할도 겸한다 — 질문을 analytics_dispatch 파라미터로
 // 바꾸는 라우팅 로직이 여기 있다. 화면(빌더 에이전트)과 실행 환경(런타임 봇)은 다르다
 // (docs/golden-tree-design.md 3.1) — 이 함수는 Supabase Edge Function, 오너 맥북과 무관하게 돈다.
 //
-// Query Contract 준수: Gemini가 호출할 수 있는 도구는 query_data 하나뿐이고, 그 안에서도
+// Query Contract 준수: LLM이 호출할 수 있는 도구는 query_data 하나뿐이고, 그 안에서도
 // analysis는 ALLOWED_ANALYSIS 화이트리스트로 서버가 재검증한다 — 여러 번 호출을 허용해도
 // analytics_dispatch(=Query Contract 함수) 밖으로는 절대 못 나간다 (CLAUDE.md 불변 규칙 #1).
-// 무료 티어 Gemini가 종종 503(과부하)을 뱉어서(오너 보고) callGeminiRaw에 재시도를 넣었다.
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const DISCORD_PUBLIC_KEY = Deno.env.get("DISCORD_PUBLIC_KEY")!;
 const DISCORD_BOT_TOKEN = Deno.env.get("DISCORD_BOT_TOKEN")!;
 const DISCORD_APPLICATION_ID = Deno.env.get("DISCORD_APPLICATION_ID")!;
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
-const GEMINI_MODEL = "gemini-3.6-flash";
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY")!;
+const OPENAI_MODEL = "gpt-5.6-luna"; // 가장 저렴한 티어 (입력 $0.20/출력 $1.20 per 1M tokens) — 오너 확정, 2026-09-09
 const SYNC_SHARED_SECRET = Deno.env.get("SYNC_SHARED_SECRET")!;
 
 const LOCATIONS: Record<string, string> = {
@@ -106,19 +111,22 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
   }
 }
 
-// 무료 티어 Gemini가 "high demand"로 503을 자주 뱉는다(2026-09-04, 오너 보고 — 질문마다
-// 실패). 일시적 과부하라 재시도로 대부분 흡수된다. 지수 백오프 2회.
-async function callGeminiRaw(body: any, attempt = 0): Promise<any> {
+// 과부하(429/503)는 일시적인 경우가 많아 지수 백오프로 재시도한다.
+async function callOpenAIRaw(body: any, attempt = 0): Promise<any> {
   const res = await fetchWithTimeout(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    `https://api.openai.com/v1/chat/completions`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({ model: OPENAI_MODEL, ...body }),
+    },
     30000,
   );
-  if (res.status === 503 && attempt < 2) {
+  if ((res.status === 429 || res.status === 503) && attempt < 2) {
     await new Promise((r) => setTimeout(r, 800 * Math.pow(2, attempt)));
-    return callGeminiRaw(body, attempt + 1);
+    return callOpenAIRaw(body, attempt + 1);
   }
-  if (!res.ok) throw new Error(`Gemini failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`OpenAI failed: ${res.status} ${await res.text()}`);
   return res.json();
 }
 
@@ -146,9 +154,10 @@ const ANALYSIS_DESCRIPTIONS = `- sales_summary: 특정 기간 매출 요약 (순
 - tax_summary: 기간별 매장별 GST/PST/Saskatchewan PST/LCT 세금액과 순매출. "세금 신고", "GST 얼마야", "PST 계산해줘" 류 질문에 사용. location_id는 무시되고 항상 두 매장 다 나온다. Bon Sushi는 주류 판매로 LCT가 추가로 있을 수 있다`;
 
 function queryDataTool() {
-  return {
-    functionDeclarations: [
-      {
+  return [
+    {
+      type: "function",
+      function: {
         name: "query_data",
         description: "82 Bakeshop(CozyHaus, Bon Sushi) 매출·소셜·광고 데이터를 조회한다. Query Contract 함수만 호출하며 이 목록 밖은 절대 만들어내지 마라.",
         parameters: {
@@ -166,8 +175,8 @@ function queryDataTool() {
           required: ["analysis", "start_date", "end_date"],
         },
       },
-    ],
-  };
+    },
+  ];
 }
 
 function agentSystemPrompt(today: string): string {
@@ -399,50 +408,59 @@ const MAX_TOOL_CALLS = 8;
 async function handleAsk(question: string, token: string) {
   try {
     const today = reginaTodayStr();
-    const contents: any[] = [{ role: "user", parts: [{ text: question }] }];
+    const messages: any[] = [
+      { role: "system", content: agentSystemPrompt(today) },
+      { role: "user", content: question },
+    ];
     const usedAnalyses = new Set<string>();
     let finalText: string | null = null;
 
     for (let i = 0; i < MAX_TOOL_CALLS; i++) {
       const isLastAttempt = i === MAX_TOOL_CALLS - 1;
-      const data = await callGeminiRaw({
-        contents,
-        systemInstruction: { parts: [{ text: agentSystemPrompt(today) }] },
-        tools: isLastAttempt ? undefined : [queryDataTool()],
+      // gpt-5.6-luna는 도구(tools)를 넘길 때 reasoning_effort를 명시적으로 "none"으로 안 두면
+      // /v1/chat/completions가 400을 낸다("Function tools with reasoning_effort are not
+      // supported... use /v1/responses or set reasoning_effort to 'none'", 실제 확인함,
+      // 2026-09-09). 도구 없는 최종 답변 턴에도 동일하게 둬서 지연시간을 낮춘다 — 이 모델은
+      // 저비용/저지연 용도라 별도 reasoning 단계 없이도 프롬프트 규칙만으로 충분하다.
+      const data = await callOpenAIRaw({
+        messages,
+        reasoning_effort: "none",
+        tools: isLastAttempt ? undefined : queryDataTool(),
       });
-      const modelContent = data.candidates?.[0]?.content;
-      const parts = modelContent?.parts ?? [];
-      const functionCallPart = parts.find((p: any) => p.functionCall);
-      const textPart = parts.map((p: any) => p.text ?? "").join("").trim();
+      const message = data.choices?.[0]?.message;
+      const toolCalls: any[] = message?.tool_calls ?? [];
 
-      if (!functionCallPart) {
-        finalText = textPart || null;
+      if (toolCalls.length === 0) {
+        finalText = (message?.content ?? "").trim() || null;
         break;
       }
 
-      // gemini-3.6-flash(thinking 모델)는 functionCall part에 thought_signature를 같이 실어
-      // 보내는데, 이걸 대화 기록에 그대로 안 돌려주면 400 에러가 난다(실제 배포 후 확인됨).
-      // functionCall만 뽑아 재구성하지 말고 모델이 준 content를 통째로 그대로 돌려준다.
-      contents.push(modelContent);
-      const args = functionCallPart.functionCall.args ?? {};
-      if (args.analysis) usedAnalyses.add(String(args.analysis));
+      // OpenAI는 assistant 메시지(tool_calls 포함)를 그대로 대화 기록에 추가하고, 각 tool_call마다
+      // role:"tool" + 그 tool_call_id를 짝지어 응답해야 한다(표준 형식 — Gemini 때 겪은 role 이름/
+      // thought_signature 같은 특수 처리가 필요 없다).
+      messages.push(message);
 
-      // 조회가 실패해도(잘못된 파라미터, 유효성 검사 실패 등) 대화를 바로 끊지 않는다 — 실패
-      // 이유를 Gemini에게 그대로 보여주면 스스로 파라미터를 고쳐서 재시도할 수 있다(예: 날짜
-      // 범위가 너무 김, item_name 빠뜨림). 사람 개입 없이 대화 안에서 자체 시행착오.
-      let toolResult: any;
-      try {
-        toolResult = await executeQueryData(args);
-      } catch (err) {
-        toolResult = { error: String(err).slice(0, 500) };
+      for (const tc of toolCalls) {
+        let args: any = {};
+        try {
+          args = JSON.parse(tc.function?.arguments ?? "{}");
+        } catch {
+          args = {};
+        }
+        if (args.analysis) usedAnalyses.add(String(args.analysis));
+
+        // 조회가 실패해도(잘못된 파라미터, 유효성 검사 실패 등) 대화를 바로 끊지 않는다 — 실패
+        // 이유를 LLM에게 그대로 보여주면 스스로 파라미터를 고쳐서 재시도할 수 있다(예: 날짜
+        // 범위가 너무 김, item_name 빠뜨림). 사람 개입 없이 대화 안에서 자체 시행착오.
+        let toolResult: any;
+        try {
+          toolResult = await executeQueryData(args);
+        } catch (err) {
+          toolResult = { error: String(err).slice(0, 500) };
+        }
+
+        messages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(toolResult) });
       }
-
-      // gemini-3.6-flash는 role "function"을 안 받는다(400 INVALID_ARGUMENT, 실제 배포 후
-      // 확인됨) — 유효 role 목록에 USER만 있고 FUNCTION/TOOL이 없다. "user"로 보낸다.
-      contents.push({
-        role: "user",
-        parts: [{ functionResponse: { name: "query_data", response: toolResult } }],
-      });
     }
 
     if (!finalText) {

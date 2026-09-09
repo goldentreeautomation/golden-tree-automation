@@ -6,15 +6,18 @@
 // 필요도 없음). 오너 지시: "회의할 땐 전 주(풀 7일 지난)를 비교"하므로 진행 중인 주 비례
 // 계산(0018의 옛 방식)은 이 패널에서는 더 이상 쓰지 않는다.
 //
-// 특이사항(anomaly) 문장은 Gemini가 쓰되, day_offset 0~3(발행 당일~3일 후) + 주말 지연 반응을
+// 특이사항(anomaly) 문장은 LLM이 쓰되, day_offset 0~3(발행 당일~3일 후) + 주말 지연 반응을
 // 반영한 기존 상관관계 로직(analytics_social_sales_correlation, 0008)을 근거로만 쓰게 한다 —
 // "그날 포스팅→그날 매출"처럼 당일만 보는 단순 인과는 오너가 명시적으로 나쁜 예로 지적함.
+//
+// 2026-09-09 Gemini→OpenAI 교체(오너 결정, runtime/discord와 동일한 이유 — 무료 티어 20건/일
+// 한도, 유료 GPT 계정 이미 보유).
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SYNC_SHARED_SECRET = Deno.env.get("SYNC_SHARED_SECRET")!;
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
-const GEMINI_MODEL = "gemini-3.6-flash";
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY")!;
+const OPENAI_MODEL = "gpt-5.6-luna";
 
 const LOCATIONS = [
   { id: "LWEFT8C6SXJ7J", name: "Bon Sushi" },
@@ -118,18 +121,19 @@ async function fetchWholeCakeOrderCount(startDate: string, endDate: string): Pro
   return results.reduce((sum: number, r: any) => sum + (r?.total_order_count ?? 0), 0);
 }
 
-async function callGemini(prompt: string): Promise<string> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }] }),
-    },
-  );
-  if (!res.ok) throw new Error(`Gemini failed: ${res.status} ${await res.text()}`);
+async function callOpenAI(prompt: string): Promise<string> {
+  const res = await fetch(`https://api.openai.com/v1/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      reasoning_effort: "none", // 도구 없이도 gpt-5.6-luna 기본값(medium)은 지연시간만 늘림
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error(`OpenAI failed: ${res.status} ${await res.text()}`);
   const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+  return data?.choices?.[0]?.message?.content?.trim() ?? "";
 }
 
 // 특이사항 문장 — day_offset 0~3(발행 당일~3일 후)/주말 지연 반응을 반영한 기존 상관관계
@@ -181,7 +185,7 @@ ${JSON.stringify(dailySales)}
 ${correlationSection}`;
 
   try {
-    const text = await callGemini(prompt);
+    const text = await callOpenAI(prompt);
     return text || "이번 주는 특이사항 문장을 생성하지 못했다.";
   } catch (err) {
     return `특이사항 분석 실패: ${String(err)}`;

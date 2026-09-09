@@ -14,8 +14,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const META_ACCESS_TOKEN = Deno.env.get("META_ACCESS_TOKEN")!;
 const SYNC_SHARED_SECRET = Deno.env.get("SYNC_SHARED_SECRET")!;
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
-const GEMINI_MODEL = "gemini-3.6-flash";
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY")!;
+const OPENAI_MODEL = "gpt-5.6-luna"; // 2026-09-09 Gemini→OpenAI 교체(오너 결정, runtime/discord 참조)
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 const AD_ACCOUNT_ID = "act_545127089932186";
 
@@ -114,24 +114,27 @@ async function describePostImage(imageUrl: string | null): Promise<string | null
     const bytes = new Uint8Array(await imgRes.arrayBuffer());
     const base64 = bytesToBase64(bytes);
     const body = {
-      contents: [{
+      model: OPENAI_MODEL,
+      reasoning_effort: "none",
+      messages: [{
         role: "user",
-        parts: [
-          { text: "이 카페/베이커리 SNS 게시물 사진에 어떤 메뉴(음식·음료)가 나오는지 한국어로 한 문장으로 설명해줘. 메뉴 이름을 정확히 모르면 생김새를 구체적으로 묘사해줘. 사람/매장 인테리어 사진이면 그렇다고만 짧게 말해줘." },
-          { inlineData: { mimeType, data: base64 } },
+        content: [
+          { type: "text", text: "이 카페/베이커리 SNS 게시물 사진에 어떤 메뉴(음식·음료)가 나오는지 한국어로 한 문장으로 설명해줘. 메뉴 이름을 정확히 모르면 생김새를 구체적으로 묘사해줘. 사람/매장 인테리어 사진이면 그렇다고만 짧게 말해줘." },
+          { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
         ],
       }],
     };
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
-    );
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify(body),
+    });
     if (!res.ok) {
       console.error(`vision describe failed: ${res.status} ${await res.text()}`);
       return null;
     }
     const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("").trim();
+    const text = data.choices?.[0]?.message?.content?.trim();
     return text || null;
   } catch (err) {
     console.error("describePostImage failed:", err);
