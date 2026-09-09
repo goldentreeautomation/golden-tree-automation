@@ -64,6 +64,30 @@ const SPECIAL_DEMAND_DATES: Record<string, string> = {
   "2026-12-31": "New Year's Eve",
 };
 
+// 개학 시즌(오너 요청, 2026-09-09 — "back to school week historically -6%" 같은 계절 패턴도
+// 반영해달라고 함) — 감으로 넣지 않고 실제 데이터로 백테스트함(2025·2026 Regina Public
+// Schools 개학일 둘 다 9/2 기준 준비주+개학첫주, 총 13일씩 대조).
+// 결과: 본스시는 두 해 모두 일관되게 마이너스(-15.2%/-8.1%, -4.6%/-14.9%, 평균 약 -10~11%),
+// 코지하우스는 연도별로 방향이 반대(-9.0%/-4.1% → +7.0%/+2.7%)라 패턴이라 부를 근거가
+// 부족함 — 코지하우스는 0(중립)으로 두고 본스시만 반영한다. 연도별 개학일이 바뀌므로 매년
+// 갱신 필요(Regina Public Schools 캘린더 확인).
+const BACK_TO_SCHOOL_WINDOWS: { start: string; end: string }[] = [
+  { start: "2025-08-25", end: "2025-09-07" },
+  { start: "2026-08-24", end: "2026-09-07" },
+];
+const BACK_TO_SCHOOL_IMPACT_BY_BRAND: Record<string, number> = {
+  LWEFT8C6SXJ7J: -10, // Bon Sushi — 백테스트로 확인된 값
+  L7DA0MBKD2X4P: 0, // CozyHaus — 증거 부족(연도별 반대 방향), 중립 처리
+};
+
+function backToSchoolImpact(brandId: string, dateStr: string): { impact: number; reasons: string[] } {
+  const inWindow = BACK_TO_SCHOOL_WINDOWS.some((w) => dateStr >= w.start && dateStr <= w.end);
+  if (!inWindow) return { impact: 0, reasons: [] };
+  const impact = BACK_TO_SCHOOL_IMPACT_BY_BRAND[brandId] ?? 0;
+  if (impact === 0) return { impact: 0, reasons: [] };
+  return { impact, reasons: [`개학 시즌(백테스트 확인: 이 매장은 이 기간 평균 ${impact}% 영향)`] };
+}
+
 function corsHeaders() {
   return { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
 }
@@ -438,17 +462,20 @@ Deno.serve(async (req) => {
       ]);
       const socialImpactTotal = soc.impact + ad.impact;
       socialByBrand[brand.id] = soc;
+      const bts = backToSchoolImpact(brand.id, dateStr);
+      const calImpactTotal = cal.impact + bts.impact;
 
       for (const period of PERIODS) {
         const hist = await historyImpact(brand.id, period, dateStr);
         const score = Math.max(
           0,
-          Math.min(100, Math.round(50 + hist.impact + w.impact + cal.impact + ev.impact + socialImpactTotal)),
+          Math.min(100, Math.round(50 + hist.impact + w.impact + calImpactTotal + ev.impact + socialImpactTotal)),
         );
         const reasons = [
           ...hist.reasons.map((r) => ({ text: r, sign: hist.impact >= 0 ? "+" : "-" })),
           ...w.reasons.map((r) => ({ text: r, sign: w.impact >= 0 ? "+" : "-" })),
           ...cal.reasons.map((r) => ({ text: r, sign: cal.impact >= 0 ? "+" : "-" })),
+          ...bts.reasons.map((r) => ({ text: r, sign: bts.impact >= 0 ? "+" : "-" })),
           ...ev.reasons.map((r) => ({ text: r, sign: "+" })),
           ...soc.reasons.map((r) => ({ text: r, sign: soc.impact > 0 ? "+" : "-" })),
           ...ad.reasons.map((r) => ({ text: r, sign: "+" })),
@@ -461,10 +488,10 @@ Deno.serve(async (req) => {
           score,
           demand_band: scoreToBand(score),
           confidence: hist.sample_weeks >= 4 ? confidence : "low",
-          model_version: "rule-v3", // 소셜(포스팅+광고) 신호 반영, 2026-09-09
+          model_version: "rule-v4", // 개학 시즌(브랜드별 백테스트) 반영, 2026-09-09
           weather_impact: w.impact,
           event_impact: ev.impact,
-          calendar_impact: cal.impact,
+          calendar_impact: calImpactTotal,
           search_impact: 0,
           operations_impact: hist.impact,
           social_impact: socialImpactTotal,
