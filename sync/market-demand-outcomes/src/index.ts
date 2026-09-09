@@ -9,10 +9,16 @@
 //
 // 매일 새벽(America/Regina) 한 번, 완전히 끝난 "어제"에 대해서만 계산한다 — 그래야 하루치가
 // 전부 settle된 뒤 기록되고, idempotent하게 재실행해도 같은 값으로 덮어쓴다(불변 규칙 #6).
+//
+// 같은 이유로 "어제"의 과거 날씨(Open-Meteo Archive API)도 여기서 같이 기록한다 —
+// `regina_weather_history`(0030, 오너 요청 2026-09-09) "지금까지 오늘 날씨만 실시간으로
+// 보고 버려서 과거 날씨 기록이 없다"는 문제를 매일 자동으로 쌓는 방식으로 해결.
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SYNC_SHARED_SECRET = Deno.env.get("SYNC_SHARED_SECRET")!;
+const REGINA_LAT = 50.4526593;
+const REGINA_LON = -104.6184244;
 
 const BRANDS = ["LWEFT8C6SXJ7J", "L7DA0MBKD2X4P"];
 
@@ -52,6 +58,33 @@ async function fetchOrders(locationId: string, businessDate: string): Promise<an
   });
   if (!res.ok) throw new Error(`orders_settled fetch failed: ${res.status} ${await res.text()}`);
   return res.json();
+}
+
+async function fetchAndStoreWeather(dateStr: string) {
+  const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${REGINA_LAT}&longitude=${REGINA_LON}` +
+    `&start_date=${dateStr}&end_date=${dateStr}` +
+    `&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,apparent_temperature_max,apparent_temperature_min,precipitation_sum,rain_sum,snowfall_sum,windspeed_10m_max,weathercode` +
+    `&timezone=America%2FRegina`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Open-Meteo archive failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  const d = data.daily;
+  if (!d?.time?.length) return;
+  await upsert("regina_weather_history", [{
+    date: d.time[0],
+    temperature_max_c: d.temperature_2m_max?.[0] ?? null,
+    temperature_min_c: d.temperature_2m_min?.[0] ?? null,
+    temperature_mean_c: d.temperature_2m_mean?.[0] ?? null,
+    feels_like_max_c: d.apparent_temperature_max?.[0] ?? null,
+    feels_like_min_c: d.apparent_temperature_min?.[0] ?? null,
+    precipitation_mm: d.precipitation_sum?.[0] ?? null,
+    rain_mm: d.rain_sum?.[0] ?? null,
+    snowfall_cm: d.snowfall_sum?.[0] ?? null,
+    wind_speed_max_kph: d.windspeed_10m_max?.[0] ?? null,
+    weather_code: d.weathercode?.[0] ?? null,
+    source: "open-meteo",
+    imported_at: new Date().toISOString(),
+  }], "date");
 }
 
 async function upsert(table: string, rows: any[], onConflict: string) {
@@ -97,6 +130,7 @@ Deno.serve(async (req) => {
     }
 
     await upsert("market_demand_outcomes", rows, "brand_id,period_start,source");
+    await fetchAndStoreWeather(targetDate).catch((err) => console.error("weather archive fetch failed:", err));
 
     return new Response(JSON.stringify({ status: "success", date: targetDate, rows: rows.length }), {
       headers: { "content-type": "application/json", ...corsHeaders() },
