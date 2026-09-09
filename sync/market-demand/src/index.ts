@@ -7,11 +7,14 @@
 //   기본 50 | 과거 실적 -20~+20 | 날씨 -15~+10 | 지역행사 0~+20 |
 //   공휴일·계절 -10~+10 | 검색관심도 -10~+10 | 도로/교통/특보 -10~0
 //
-// 지금 구현된 신호: 과거 실적(우리 Square 데이터), 날씨(Open-Meteo, 무료·키 불필요), 캘린더.
+// 지금 구현된 신호: 과거 실적(우리 Square 데이터), 날씨(Open-Meteo, 무료·키 불필요), 캘린더,
+// 지역행사(Ticketmaster Discovery API, 2026-09-09 추가 — 오너가 "라이더스 홈경기 때 사람
+// 많았다"고 실제 관찰한 게 계기, 상세 `docs/decisions/0020`). 라이더스 홈경기(Mosaic Stadium)
+// 를 가장 높게 가중, Brandt Centre(Regina Pats 등) 다음, 그 외 티켓 행사는 낮게. 동네 축제·
+// 파머스마켓처럼 티켓 없는 소규모 행사는 이 API에 안 잡히는 한계는 있음.
 // 아직 미구현(항상 0, source_status에 "unavailable"로 표시, 신뢰도에 반영):
-//   지역행사 — 신뢰할 만한 무료 피드를 아직 못 찾음 (City of Regina 오픈데이터 확인 필요)
 //   검색관심도 — GSC는 이 프로젝트 범위 밖 (docs/decisions/0005, 코덱스 사이드 프로젝트 소관)
-//   도로/교통/대기질 — 아직 미조사
+//   도로/교통/대기질 — 조사 결과 서스캐처원은 고속도로 전용(시내 교통과 무관)이라 낮은 우선순위
 //
 // 학습(회귀 모델)은 여기 없다 — market_demand_outcomes에 실적이 8주/200건 이상 쌓이기 전엔
 // 의미가 없어서, 데이터 축적 인프라만 지금 만든다 (db/migrations 0009~0011).
@@ -19,6 +22,7 @@
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SYNC_SHARED_SECRET = Deno.env.get("SYNC_SHARED_SECRET")!;
+const TICKETMASTER_API_KEY = Deno.env.get("TICKETMASTER_API_KEY")!;
 
 const REGINA_LAT = 50.4526593;
 const REGINA_LON = -104.6184244;
@@ -164,6 +168,61 @@ function calendarImpact(dateStr: string): { impact: number; reasons: string[]; f
   };
 }
 
+// 지역행사 (2026-09-09 추가, 오너 요청 — "라이더스 홈경기 때 사람 많았다"는 실제 관찰이 계기).
+// Ticketmaster Discovery API(무료, 하루 5000건)로 리자이나 행사를 가져온다 — 다른 무료
+// 대안(Eventbrite 공개 검색은 폐지됨, 시청 오픈데이터 포털은 접속 차단)이 없어 이걸로 확정.
+// 큰 티켓 행사만 잡힌다(동네 축제·파머스마켓은 안 잡힘) — 알려진 한계.
+const TICKETMASTER_EVENTS_CACHE: { fetchedAt: number; events: any[] } = { fetchedAt: 0, events: [] };
+
+async function fetchReginaEvents(): Promise<any[]> {
+  // 같은 크론 실행 안에서 브랜드×기간(2×3=6번) 반복하는 동안 매번 다시 부르지 않도록 캐시.
+  if (Date.now() - TICKETMASTER_EVENTS_CACHE.fetchedAt < 5 * 60 * 1000) return TICKETMASTER_EVENTS_CACHE.events;
+  const url = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${TICKETMASTER_API_KEY}&city=Regina&countryCode=CA&size=50&sort=date,asc`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error(`Ticketmaster failed: ${res.status} ${await res.text()}`);
+    return [];
+  }
+  const data = await res.json();
+  const events = data?._embedded?.events ?? [];
+  TICKETMASTER_EVENTS_CACHE.fetchedAt = Date.now();
+  TICKETMASTER_EVENTS_CACHE.events = events;
+  return events;
+}
+
+// 행사 영향 0~+20(스펙 그대로, 음수 없음). 라이더스 홈경기(Mosaic Stadium, 3만석 이상 —
+// 리자이나 인구 대비 압도적으로 큰 이벤트)를 가장 높게, 그 외 대형 공연장 순으로 가중치를 둔다.
+// 리자이나 전체 외식 수요에 영향을 주는 시내 단위 신호라 두 매장에 동일하게 적용한다.
+function eventImpact(events: any[], dateStr: string): { impact: number; reasons: string[]; count: number } {
+  const todays = events.filter((e: any) => e?.dates?.start?.localDate === dateStr);
+  let impact = 0;
+  const reasons: string[] = [];
+  for (const e of todays) {
+    const venue = e?._embedded?.venues?.[0]?.name ?? "";
+    const name = e?.name ?? "";
+    let weight = 4;
+    let label = `지역 행사: ${name}`;
+    if (venue.includes("Mosaic Stadium")) {
+      if (name.includes("Roughriders")) {
+        weight = 20;
+        label = `라이더스 홈경기: ${name}`;
+      } else {
+        weight = 15;
+        label = `Mosaic Stadium 대형 행사: ${name}`;
+      }
+    } else if (venue.includes("Brandt Centre")) {
+      weight = 8;
+      label = `Brandt Centre 행사: ${name}`;
+    }
+    if (weight > impact) {
+      impact = weight;
+      reasons.length = 0;
+      reasons.push(label);
+    }
+  }
+  return { impact: Math.min(20, impact), reasons, count: todays.length };
+}
+
 async function historyImpact(brandId: string, period: Period, dateStr: string) {
   const [baselineRows, profileRows] = await Promise.all([
     rpc("market_demand_baseline", { p_location_id: brandId, p_period: period, p_target_date: dateStr, p_lookback_weeks: 8 }),
@@ -244,11 +303,16 @@ Deno.serve(async (req) => {
     const weather = await fetchWeather();
     const w = weatherImpact(weather);
     const cal = calendarImpact(dateStr);
+    const events = await fetchReginaEvents().catch((err) => {
+      console.error("Ticketmaster fetch failed:", err);
+      return [] as any[];
+    });
+    const ev = eventImpact(events, dateStr);
 
     // source_status: 지금 확보된 신호 vs 아직 없는 신호를 명시 — 신뢰도 계산에 씀
-    const unavailableSignals = ["events", "search_trend", "road_traffic_air_quality"];
-    const availableCount = 3; // weather, calendar, history
-    const confidence = availableCount >= 3 && cal ? "medium" : "low"; // 행사·검색 없으니 high는 아직 안 씀
+    const unavailableSignals = ["search_trend", "road_traffic_air_quality"];
+    const availableCount = 4; // weather, calendar, history, events(2026-09-09 추가)
+    const confidence = availableCount >= 4 && cal ? "medium" : "low";
 
     const results: any[] = [];
     for (const brand of BRANDS) {
@@ -256,12 +320,13 @@ Deno.serve(async (req) => {
         const hist = await historyImpact(brand.id, period, dateStr);
         const score = Math.max(
           0,
-          Math.min(100, Math.round(50 + hist.impact + w.impact + cal.impact)),
+          Math.min(100, Math.round(50 + hist.impact + w.impact + cal.impact + ev.impact)),
         );
         const reasons = [
           ...hist.reasons.map((r) => ({ text: r, sign: hist.impact >= 0 ? "+" : "-" })),
           ...w.reasons.map((r) => ({ text: r, sign: w.impact >= 0 ? "+" : "-" })),
           ...cal.reasons.map((r) => ({ text: r, sign: cal.impact >= 0 ? "+" : "-" })),
+          ...ev.reasons.map((r) => ({ text: r, sign: "+" })),
         ].slice(0, 5);
 
         results.push({
@@ -271,9 +336,9 @@ Deno.serve(async (req) => {
           score,
           demand_band: scoreToBand(score),
           confidence: hist.sample_weeks >= 4 ? confidence : "low",
-          model_version: "rule-v1",
+          model_version: "rule-v2", // 지역행사(Ticketmaster) 반영, 2026-09-09
           weather_impact: w.impact,
-          event_impact: 0,
+          event_impact: ev.impact,
           calendar_impact: cal.impact,
           search_impact: 0,
           operations_impact: hist.impact,
@@ -282,6 +347,7 @@ Deno.serve(async (req) => {
           reasons,
           source_status: {
             weather: "ok", calendar: "ok", history: hist.sample_weeks >= 4 ? "ok" : "insufficient_data",
+            events: "ok",
             unavailable: unavailableSignals,
           },
           calculated_at: calculatedAt,
@@ -297,9 +363,9 @@ Deno.serve(async (req) => {
       ...w.features,
       weather_alert: false,
       weather_alert_text: null,
-      nearby_event_count: 0,
-      weighted_event_score: 0,
-      events_confirmed: false,
+      nearby_event_count: ev.count,
+      weighted_event_score: ev.impact,
+      events_confirmed: ev.count > 0,
       ...cal.features,
       search_trend_pct: null,
       road_alert: false,
@@ -307,7 +373,7 @@ Deno.serve(async (req) => {
       air_quality_index: null,
       same_weekday_baseline_net_sales: null,
       same_weekday_baseline_order_count: null,
-      raw: { weather_current: weather.current },
+      raw: { weather_current: weather.current, events_today: events.filter((e: any) => e?.dates?.start?.localDate === dateStr).map((e: any) => e.name) },
     }));
     await upsert("market_demand_features", featureRows, "brand_id,observed_at");
 
