@@ -74,6 +74,17 @@ Discord를 거치지 않고 백엔드 코드가 이름으로 직접 부른다.
 
 기록은 Query Contract가 아니라 Discord `/stock` 슬래시 명령어(직접 `stock_events` insert)로 한다 — 쓰기는 이 계약 범위 밖(읽기 전용 규칙 #1은 조회 함수 대상). 상세: `docs/decisions/0014`.
 
+## E. 주간 경영 회의 OKR (2026-09-08)
+
+| 함수 | 호출자 | 용도 |
+|---|---|---|
+| `analytics_social_weekly_overview(p_start_date, p_end_date, p_location_id)` | `sync/weekly-okr-snapshot` | 소셜 오가닉(포스팅수·조회수·참여율) + 부스트된 포스트 광고(캠페인명 "Instagram post:" 접두사로 식별) + 기타 광고 비용을 구분 집계 |
+| `analytics_weekly_okr(p_location_id)` | `dashboard-api` | `weekly_okr_snapshots`에서 최근 4주 스냅샷 조회 — **실시간 계산이 아니라 일요일 밤 11시(Regina) cron이 저장해둔 결과를 읽기만 함** |
+
+`weekly_okr_snapshots`(매출 기준선/목표 대비 상태, 홀케이크 주문 수, 소셜 요약, AI 특이사항 문장)는 `sync/weekly-okr-snapshot` Edge Function이 계산해 저장한다. 상세: `docs/decisions/0018`(개정).
+
+`external_web_metrics` — 웹사이트·GBP 지표는 이 프로젝트가 수집하지 않고(`0005`), 별도 저장소인 코덱스 프로젝트가 `web/external-metrics-ingest`(전용 비밀키 `EXTERNAL_METRICS_SECRET`, `SYNC_SHARED_SECRET`과 분리)로 밀어넣는 창구만 제공한다. 아직 대시보드에 표시하는 코드는 없음(수신 인프라만 구축, 2026-09-08).
+
 ## 사용되지 않는(고아) 함수 — 계약에서 제외
 
 아래는 DB엔 존재하지만 `analytics_dispatch`도, 대시보드도 호출하지 않는다. 레거시 또는 상위 버전으로 대체된 것들 — **새 코드에서 쓰지 말 것**. 정리(DROP)는 G4 대상이라 별도 승인 시 진행.

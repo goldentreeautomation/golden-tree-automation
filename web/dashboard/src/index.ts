@@ -112,14 +112,25 @@ const HTML = `<!doctype html>
   .badge.down { background: var(--negative-bg); color: var(--negative-text); }
   .badge.flat { background: var(--hairline-soft); color: var(--stone); }
 
-  /* 주간 회의 KPI 기준선/목표 상태등 (오너 확정, 2026-09-08) */
-  .kpi-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .sub-label { font-size: 12.5px; color: var(--stone); margin-top: 5px; }
+
+  /* ── 주간 OKR 섹션(최상단, 오너 확정 2026-09-08) ── */
+  .okr-section { display: flex; flex-direction: column; gap: 16px; margin-bottom: 22px; }
+  .okr-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  @media (min-width: 640px) { .okr-grid { grid-template-columns: 1fr 1fr; } }
+  .okr-card { display: flex; flex-direction: column; gap: 10px; }
+  .kpi-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .kpi-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: var(--radius-pill); }
   .kpi-badge.green { background: var(--positive-bg); color: var(--positive-text); }
   .kpi-badge.yellow { background: var(--warn-bg); color: var(--warn-text); }
   .kpi-badge.red { background: var(--negative-bg); color: var(--negative-text); }
   .kpi-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-  .sub-label { font-size: 12.5px; color: var(--stone); margin-top: 5px; }
+  .okr-week { font-size: 11.5px; color: var(--muted); }
+  .okr-social-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .okr-social-stat { background: var(--surface-soft); border-radius: var(--radius-md); padding: 8px 12px; font-size: 12px; color: var(--stone); }
+  .okr-social-stat b { color: var(--ink); font-size: 13px; }
+  .okr-note { font-size: 12.5px; color: var(--stone); line-height: 1.6; background: var(--surface-soft); border-radius: var(--radius-md); padding: 10px 12px; }
+  .okr-empty { font-size: 12.5px; color: var(--muted); }
   .stat-row { display: flex; gap: 10px; margin-top: 20px; }
   .stat { flex: 1; background: var(--surface-soft); border-radius: var(--radius-md); padding: 12px 14px; }
   .stat .label { font-size: 10px; color: var(--stone); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -163,13 +174,11 @@ const HTML = `<!doctype html>
 
   footer { text-align: center; font-size: 11px; color: var(--muted); padding: 20px 16px 8px; letter-spacing: 0.01em; }
 
-  /* ── 레이아웃: 왼쪽 시장 수요 예상(주력) / 오른쪽 매출 위젯(보조) ── */
+  /* ── 레이아웃: OKR(최상단) → 매출(중단) → 시장 수요 예상(하단, 보조) 순 세로 배치 ──
+     (오너 지시, 2026-09-08 — 이전엔 좌우 2열이었으나 회의에서 가장 먼저 볼 지표를 맨 위로) */
   .layout { display: flex; flex-direction: column; gap: 16px; }
-  .demand-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
   .sales-col { min-width: 0; }
-  @media (min-width: 900px) {
-    .layout { display: grid; grid-template-columns: 1fr 340px; align-items: start; gap: 20px; }
-  }
+  .demand-col { min-width: 0; margin-top: 8px; }
 
   .disclaimer {
     font-size: 11.5px; color: var(--stone); background: var(--surface-soft);
@@ -228,9 +237,14 @@ const HTML = `<!doctype html>
   .sales-col .net-sales { font-size: 24px; }
   .sales-col .card + .card { margin-top: 12px; }
 
-  @media (min-width: 640px) and (max-width: 899px) {
-    .demand-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  }
+  /* 시장 수요 예상은 회의 지표가 아니라 참고용 — 화면을 덜 차지하도록 압축, 두 매장 나란히
+     (오너 지시, 2026-09-08: "너무 쓸데없이 화면을 많이 차지하니까... 박스크기 조금 줄여서") */
+  .demand-grid { display: flex; flex-direction: column; gap: 12px; }
+  @media (min-width: 560px) { .demand-grid { flex-direction: row; } .demand-grid .demand-card { flex: 1; min-width: 0; } }
+  .demand-card { padding: 16px; }
+  .demand-card .demand-score { font-size: clamp(24px, 4vw, 28px); }
+  .demand-card .period-row { margin-top: 12px; }
+  .demand-card .period-stat { padding: 7px 6px; }
 </style>
 </head>
 <body>
@@ -319,20 +333,7 @@ function renderCategoryPie(groups) {
     '<div class="legend">' + legend + '</div>' +
   '</div>';
 }
-const KPI_LEVEL_LABEL = { red: '삐용삐용 (기준선 미달)', yellow: '주의 (목표 미달)', green: '정상' };
-function renderKpiRow(loc) {
-  const badges = [];
-  if (loc.kpi_status) {
-    const s = loc.kpi_status;
-    badges.push('<span class="kpi-badge ' + s.level + '"><span class="kpi-dot"></span>매출 ' + KPI_LEVEL_LABEL[s.level] +
-      ' · 기준선 ' + fmtMoney(s.weekly_floor) + (s.weekly_target ? ' · 목표 ' + fmtMoney(s.weekly_target) : '') + '</span>');
-  }
-  if (loc.cake_kpi) {
-    const k = loc.cake_kpi;
-    badges.push('<span class="kpi-badge ' + k.level + '"><span class="kpi-dot"></span>홀케이크 ' + k.order_count + '/' + k.weekly_target + '건(주간 목표)</span>');
-  }
-  return badges.length ? '<div class="kpi-row">' + badges.join('') + '</div>' : '';
-}
+const KPI_LEVEL_LABEL = { red: '기준선 미달', yellow: '목표 미달', green: '정상' };
 function renderLocation(loc) {
   return '<div class="card">' +
     '<div class="loc-name">' + loc.location_name + '</div>' +
@@ -340,7 +341,6 @@ function renderLocation(loc) {
       '<div class="net-sales">' + fmtMoney(loc.net_sales) + '</div>' +
       badgeHtml(loc.compare.net_sales_change_pct) +
     '</div>' +
-    renderKpiRow(loc) +
     '<div class="sub-label">지난주 같은 기간 ' + fmtMoney(loc.compare.net_sales) + '</div>' +
     '<div class="stat-row">' +
       '<div class="stat"><div class="label">결제건수</div><div class="value">' + loc.order_count.toLocaleString() + '건</div></div>' +
@@ -409,6 +409,48 @@ function renderMarketDemand(loc) {
   '</div>';
 }
 
+function renderOkrCard(loc) {
+  if (!loc.available) {
+    return '<div class="card okr-card"><div class="loc-name">' + loc.location_name + '</div>' +
+      '<div class="okr-empty">아직 계산된 지난주 지표가 없습니다(일요일 밤 자동 계산).</div></div>';
+  }
+  const badges = [];
+  badges.push('<span class="kpi-badge ' + loc.net_sales_status + '"><span class="kpi-dot"></span>매출 ' + KPI_LEVEL_LABEL[loc.net_sales_status] +
+    ' · ' + fmtMoney(loc.net_sales) + ' (기준 ' + fmtMoney(loc.net_sales_floor) + ' / 목표 ' + fmtMoney(loc.net_sales_target) + ')</span>');
+  if (loc.cake_status) {
+    badges.push('<span class="kpi-badge ' + loc.cake_status + '"><span class="kpi-dot"></span>홀케이크 ' + loc.cake_order_count + '/' + loc.cake_order_target + '건</span>');
+  }
+  const s = loc.social_summary || {};
+  const o = s.organic || {};
+  const socialStats = [
+    '<div class="okr-social-stat">포스팅 <b>' + (o.post_count ?? 0) + '</b>건</div>',
+    '<div class="okr-social-stat">조회수 <b>' + (o.total_views ?? 0).toLocaleString() + '</b></div>',
+    '<div class="okr-social-stat">참여율 <b>' + (o.engagement_rate_pct != null ? o.engagement_rate_pct + '%' : '–') + '</b></div>',
+  ];
+  const boosted = s.boosted_posts || [];
+  if (boosted.length > 0) {
+    const spend = boosted.reduce((sum, b) => sum + (b.spend || 0), 0);
+    socialStats.push('<div class="okr-social-stat">부스트 광고 <b>' + fmtMoney(spend) + '</b> 집행(' + boosted.length + '건 포스팅)</div>');
+  }
+  if (s.other_ads && s.other_ads.spend > 0) {
+    socialStats.push('<div class="okr-social-stat">일반 광고 <b>' + fmtMoney(s.other_ads.spend) + '</b>' +
+      (s.other_ads.cpc ? ' · 클릭당 ' + fmtMoney(s.other_ads.cpc) : '') +
+      (s.other_ads.cost_per_result ? ' · 결과당 ' + fmtMoney(s.other_ads.cost_per_result) : '') + '</div>');
+  }
+  return '<div class="card okr-card">' +
+    '<div class="loc-name">' + loc.location_name + '</div>' +
+    '<div class="kpi-row">' + badges.join('') + '</div>' +
+    '<div class="okr-social-row">' + socialStats.join('') + '</div>' +
+    (loc.anomaly_note ? '<div class="okr-note">' + loc.anomaly_note + '</div>' : '') +
+  '</div>';
+}
+function renderOkrSection(okr) {
+  const weekLabel = okr.week_start && okr.week_end ? fmtDateRange(okr.week_start, okr.week_end) + ' (지난주)' : '';
+  return '<div class="section-title" style="margin-top:0;">주간 OKR</div>' +
+    (weekLabel ? '<div class="okr-week">' + weekLabel + '</div>' : '') +
+    '<div class="okr-grid">' + okr.locations.map(renderOkrCard).join('') + '</div>';
+}
+
 async function load() {
   if (loading) return;
   loading = true;
@@ -421,10 +463,12 @@ async function load() {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
+    const okrHtml = renderOkrSection(data.okr);
+
     const demandHtml =
       '<div class="section-title" style="margin-top:0;">Regina 시장 수요 예상</div>' +
       '<div class="disclaimer">실제 방문객 수가 아닌 시장 신호(과거 실적·날씨·요일·캘린더) 기반 예상입니다. 확정된 혼잡도가 아닙니다.</div>' +
-      data.locations.map(renderMarketDemand).join('');
+      '<div class="demand-grid">' + data.locations.map(renderMarketDemand).join('') + '</div>';
 
     const salesHtml =
       '<div class="card widget-card">' +
@@ -441,8 +485,9 @@ async function load() {
 
     content.className = 'layout';
     content.innerHTML =
-      '<div class="demand-col">' + demandHtml + '</div>' +
-      '<div class="sales-col">' + salesHtml + '</div>';
+      '<div class="okr-section">' + okrHtml + '</div>' +
+      '<div class="sales-col">' + salesHtml + '</div>' +
+      '<div class="demand-col">' + demandHtml + '</div>';
 
     document.getElementById('prevWeek').addEventListener('click', () => { weekOffset -= 1; load(); });
     document.getElementById('nextWeek').addEventListener('click', () => { if (weekOffset < 0) { weekOffset += 1; load(); } });
