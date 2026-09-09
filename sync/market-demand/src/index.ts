@@ -223,6 +223,84 @@ function eventImpact(events: any[], dateStr: string): { impact: number; reasons:
   return { impact: Math.min(20, impact), reasons, count: todays.length };
 }
 
+// 소셜미디어 포스팅 신호 (2026-09-09 추가, 오너 요청) — "화요일 포스팅 퍼포먼스가 좋으면
+// 수요일 매출이 오를 가능성 있다"는 실제 마케팅 운영 경험을 반영. 기존 상관관계 로직(0008)의
+// day_offset 0~3 개념을 재사용해, 예측일 기준 최근 1~3일 안에 발행된 포스팅의 반응이 그
+// 계정 평소(트레일링 8주) 평균보다 크게 좋았는지 본다.
+//
+// 주의: 라이더스 홈경기 백테스트에서 확인했듯 손으로 정한 가중치는 틀릴 수 있다 — 그래서 이
+// 값은 낮고 보수적으로(0~+10) 잡고, market_demand_outcomes에 데이터가 쌓이면 실측으로
+// 교체하는 걸 전제로 한다(`0021`).
+const SOCIAL_ACCOUNT_BY_BRAND: Record<string, string> = {
+  LWEFT8C6SXJ7J: "17841478338651157", // Bon Sushi
+  L7DA0MBKD2X4P: "17841472136242619", // CozyHaus
+};
+
+async function socialImpact(brandId: string, dateStr: string): Promise<{ impact: number; reasons: string[]; postCount: number; totalInteractions: number; highPerformer: boolean }> {
+  const accountId = SOCIAL_ACCOUNT_BY_BRAND[brandId];
+  if (!accountId) return { impact: 0, reasons: [], postCount: 0, totalInteractions: 0, highPerformer: false };
+
+  const target = new Date(dateStr + "T00:00:00Z");
+  const recentStart = new Date(target); recentStart.setUTCDate(target.getUTCDate() - 3);
+  const recentEnd = new Date(target); recentEnd.setUTCDate(target.getUTCDate() - 1);
+  const baselineStart = new Date(target); baselineStart.setUTCDate(target.getUTCDate() - 59);
+  const baselineEnd = new Date(target); baselineEnd.setUTCDate(target.getUTCDate() - 4);
+
+  const fetchPosts = async (start: string, end: string) => {
+    const params = new URLSearchParams({
+      select: "post_id,published_date",
+      account_id: `eq.${accountId}`,
+      published_date: `gte.${start}`,
+    });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/social_posts?${params}&published_date=lte.${end}`, {
+      headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
+    });
+    if (!res.ok) return [];
+    return res.json();
+  };
+  const fetchInteractions = async (postIds: string[]) => {
+    if (postIds.length === 0) return new Map<string, number>();
+    const filter = postIds.map((id) => `"${id}"`).join(",");
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/social_post_metrics?select=post_id,total_interactions,captured_date&post_id=in.(${filter})&order=captured_date.desc`,
+      { headers: { apikey: SERVICE_ROLE_KEY, Authorization: `Bearer ${SERVICE_ROLE_KEY}` } },
+    );
+    if (!res.ok) return new Map<string, number>();
+    const rows = await res.json();
+    const map = new Map<string, number>();
+    for (const r of rows) if (!map.has(r.post_id)) map.set(r.post_id, r.total_interactions ?? 0); // 최신 captured_date 우선
+    return map;
+  };
+
+  const [recentPosts, baselinePosts] = await Promise.all([
+    fetchPosts(toIsoDate(recentStart), toIsoDate(recentEnd)),
+    fetchPosts(toIsoDate(baselineStart), toIsoDate(baselineEnd)),
+  ]);
+  const [recentInteractions, baselineInteractions] = await Promise.all([
+    fetchInteractions(recentPosts.map((p: any) => p.post_id)),
+    fetchInteractions(baselinePosts.map((p: any) => p.post_id)),
+  ]);
+
+  const recentTotal = [...recentInteractions.values()].reduce((a, b) => a + b, 0);
+  const recentMax = recentInteractions.size ? Math.max(...recentInteractions.values()) : 0;
+  const baselineValues = [...baselineInteractions.values()];
+  const baselineAvg = baselineValues.length ? baselineValues.reduce((a, b) => a + b, 0) / baselineValues.length : null;
+
+  let impact = 0;
+  const reasons: string[] = [];
+  let highPerformer = false;
+  if (baselineAvg && baselineAvg > 0 && recentMax > 0) {
+    const ratio = recentMax / baselineAvg;
+    if (ratio >= 2) { impact = 10; highPerformer = true; reasons.push("최근 1~3일 내 반응이 평소보다 2배 이상 좋은 포스팅 있음"); }
+    else if (ratio >= 1.5) { impact = 6; highPerformer = true; reasons.push("최근 1~3일 내 반응이 평소보다 좋은 포스팅 있음"); }
+  }
+  if (recentPosts.length === 0) { impact = 0; reasons.push("최근 3일간 포스팅 없음"); }
+
+  return { impact, reasons, postCount: recentPosts.length, totalInteractions: recentTotal, highPerformer };
+}
+
+function toIsoDate(d: Date) { return d.toISOString().slice(0, 10); }
+
 async function historyImpact(brandId: string, period: Period, dateStr: string) {
   const [baselineRows, profileRows] = await Promise.all([
     rpc("market_demand_baseline", { p_location_id: brandId, p_period: period, p_target_date: dateStr, p_lookback_weeks: 8 }),
@@ -311,23 +389,31 @@ Deno.serve(async (req) => {
 
     // source_status: 지금 확보된 신호 vs 아직 없는 신호를 명시 — 신뢰도 계산에 씀
     const unavailableSignals = ["search_trend", "road_traffic_air_quality"];
-    const availableCount = 4; // weather, calendar, history, events(2026-09-09 추가)
-    const confidence = availableCount >= 4 && cal ? "medium" : "low";
+    const availableCount = 5; // weather, calendar, history, events, social(2026-09-09 추가)
+    const confidence = availableCount >= 5 && cal ? "medium" : "low";
 
     const results: any[] = [];
+    const socialByBrand: Record<string, Awaited<ReturnType<typeof socialImpact>>> = {};
     for (const brand of BRANDS) {
+      const soc = await socialImpact(brand.id, dateStr).catch((err) => {
+        console.error(`social signal failed for ${brand.id}:`, err);
+        return { impact: 0, reasons: [], postCount: 0, totalInteractions: 0, highPerformer: false };
+      });
+      socialByBrand[brand.id] = soc;
+
       for (const period of PERIODS) {
         const hist = await historyImpact(brand.id, period, dateStr);
         const score = Math.max(
           0,
-          Math.min(100, Math.round(50 + hist.impact + w.impact + cal.impact + ev.impact)),
+          Math.min(100, Math.round(50 + hist.impact + w.impact + cal.impact + ev.impact + soc.impact)),
         );
         const reasons = [
           ...hist.reasons.map((r) => ({ text: r, sign: hist.impact >= 0 ? "+" : "-" })),
           ...w.reasons.map((r) => ({ text: r, sign: w.impact >= 0 ? "+" : "-" })),
           ...cal.reasons.map((r) => ({ text: r, sign: cal.impact >= 0 ? "+" : "-" })),
           ...ev.reasons.map((r) => ({ text: r, sign: "+" })),
-        ].slice(0, 5);
+          ...soc.reasons.map((r) => ({ text: r, sign: soc.impact > 0 ? "+" : "-" })),
+        ].slice(0, 6);
 
         results.push({
           brand_id: brand.id,
@@ -336,18 +422,19 @@ Deno.serve(async (req) => {
           score,
           demand_band: scoreToBand(score),
           confidence: hist.sample_weeks >= 4 ? confidence : "low",
-          model_version: "rule-v2", // 지역행사(Ticketmaster) 반영, 2026-09-09
+          model_version: "rule-v3", // 소셜 신호 반영, 2026-09-09
           weather_impact: w.impact,
           event_impact: ev.impact,
           calendar_impact: cal.impact,
           search_impact: 0,
           operations_impact: hist.impact,
+          social_impact: soc.impact,
           // jsonb 컬럼이므로 문자열로 stringify하면 안 된다 — 그러면 jsonb 안에 "JSON 텍스트"가
           // 그대로 들어가 이중 인코딩되고, 프론트에서 .map()이 실패한다(배열이 아니라 문자열이 됨).
           reasons,
           source_status: {
             weather: "ok", calendar: "ok", history: hist.sample_weeks >= 4 ? "ok" : "insufficient_data",
-            events: "ok",
+            events: "ok", social: "ok",
             unavailable: unavailableSignals,
           },
           calculated_at: calculatedAt,
@@ -366,6 +453,9 @@ Deno.serve(async (req) => {
       nearby_event_count: ev.count,
       weighted_event_score: ev.impact,
       events_confirmed: ev.count > 0,
+      social_recent_post_count: socialByBrand[brand.id]?.postCount ?? 0,
+      social_recent_total_interactions: socialByBrand[brand.id]?.totalInteractions ?? 0,
+      social_recent_high_performer: socialByBrand[brand.id]?.highPerformer ?? false,
       ...cal.features,
       search_trend_pct: null,
       road_alert: false,

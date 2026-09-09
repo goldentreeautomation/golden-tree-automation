@@ -57,6 +57,7 @@ Discord를 거치지 않고 백엔드 코드가 이름으로 직접 부른다.
 | `analytics_daily_sales`, `analytics_category_sales`, `analytics_top_items` | `dashboard-api` | 대시보드 카드 구성 |
 | `analytics_market_demand_latest(p_location_id)` | `dashboard-api` | 오늘 시장 수요 예상 3구간 |
 | `market_demand_baseline`, `market_demand_dow_profile` | `sync/market-demand` | 수요 예상 점수의 "과거 실적" 신호 계산 |
+| `market_demand_outcomes`(테이블, 직접 write) | `sync/market-demand-outcomes` | 예측과 대조할 실제 매출(기간대별) 기록 — 매일 새벽, `0021` |
 
 ## C. 레시피 원가율 감시 (M3 조기 착수, 2026-08-25)
 
