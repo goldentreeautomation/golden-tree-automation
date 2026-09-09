@@ -35,6 +35,53 @@ const CATCHALL_NAME: Record<string, string> = {
   L7DA0MBKD2X4P: "기타",
 };
 
+// 주간 경영 회의 KPI 기준선/목표 (오너 확정, 2026-09-08). 오너 본인 계산대로 월 매출을
+// 그대로 4로 나눔(4.33주가 아니라) — 오너가 이미 "$95,000 → 주 $23,750" 식으로 말한 숫자와
+// 맞춰야 회의에서 헷갈리지 않는다.
+const KPI_THRESHOLDS: Record<string, { weeklyFloor: number; weeklyTarget: number | null }> = {
+  LWEFT8C6SXJ7J: { weeklyFloor: 23750, weeklyTarget: 150000 / 4 }, // 월 기준선 $95,000 / 목표 $150,000
+  L7DA0MBKD2X4P: { weeklyFloor: 13750, weeklyTarget: null }, // 월 기준선 $55,000. 카페는 매출보다 케이크 주문 수가 주력 지표(아래)
+};
+
+// 코지하우스 "홀케이크 하루 3개" 목표용 — Square의 "Cake" 카테고리엔 슬라이스·티라미수컵도
+// 같이 묶여 있어서(카테고리 그대로 쓰면 과대 집계) 실제 홀케이크 5종만 이름으로 특정한다
+// (오너 의도 확인 후 조정, 2026-09-08).
+const WHOLE_CAKE_ITEM_NAMES = [
+  "Fresh Strawberry Cake",
+  "Matilda Cake",
+  "Pistachio Raspberry Cheesecake (GF)",
+  "Plain Basque Cheesecake (GF)",
+  "Maple Apple Cake",
+];
+const CAKE_ORDERS_WEEKLY_TARGET = 21; // 하루 3개 × 7일
+
+async function fetchWholeCakeOrderCount(startDate: string, endDate: string): Promise<number> {
+  const results = await Promise.all(
+    WHOLE_CAKE_ITEM_NAMES.map((name) =>
+      rpc("analytics_item_sales", { p_start_date: startDate, p_end_date: endDate, p_item_name: name, p_location_id: "L7DA0MBKD2X4P" }),
+    ),
+  );
+  return results.reduce((sum: number, r: any) => sum + (r?.total_order_count ?? 0), 0);
+}
+
+// 진행 중인 주는 기준선/목표를 그대로 적용하면 항상 "빨간불"로 보인다(화요일인데 주간
+// 기준액을 못 채웠다고 뜨는 식) — 지금까지 지난 시간 비율만큼 기준선도 같이 줄여서 비교한다.
+function kpiStatus(locationId: string, currentValue: number, elapsedFraction: number) {
+  const t = KPI_THRESHOLDS[locationId];
+  if (!t) return null;
+  const floorProrated = t.weeklyFloor * elapsedFraction;
+  const targetProrated = t.weeklyTarget !== null ? t.weeklyTarget * elapsedFraction : null;
+  let level: "red" | "yellow" | "green";
+  if (currentValue < floorProrated) level = "red";
+  else if (targetProrated !== null && currentValue < targetProrated) level = "yellow";
+  else level = "green";
+  return {
+    level,
+    weekly_floor: Math.round(t.weeklyFloor * 100) / 100,
+    weekly_target: t.weeklyTarget !== null ? Math.round(t.weeklyTarget * 100) / 100 : null,
+  };
+}
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -161,10 +208,12 @@ Deno.serve(async (req) => {
     // "저번주 화요일 24시간"과 비교하는 바람에 항상 불공정하게 낮게 나왔다.)
     let curSales: any[];
     let prevSales: any[];
+    let weekElapsedFraction = 1; // 완결된 과거 주는 기준선을 100% 그대로 적용
     if (isCurrentWeek) {
       const thisMondayTs = new Date(cur.start + "T00:00:00-06:00");
       const nowTs = new Date();
       const elapsedMs = nowTs.getTime() - thisMondayTs.getTime();
+      weekElapsedFraction = Math.min(1, elapsedMs / (7 * 24 * 3600 * 1000));
       const prevMondayTs = new Date(prev.start + "T00:00:00-06:00");
       const prevCutoffTs = new Date(prevMondayTs.getTime() + elapsedMs);
       [curSales, prevSales] = await Promise.all([
@@ -225,6 +274,18 @@ Deno.serve(async (req) => {
     );
     const marketDemandMap = Object.fromEntries(marketDemandByLocation);
 
+    // 코지하우스 홀케이크 주간 회의 지표 (오너 확정, 2026-09-08) — 하루 3개 목표
+    const cakeOrderCount = await fetchWholeCakeOrderCount(cur.start, cur.end);
+    const cakeKpi = {
+      order_count: cakeOrderCount,
+      weekly_target: CAKE_ORDERS_WEEKLY_TARGET,
+      level: cakeOrderCount >= CAKE_ORDERS_WEEKLY_TARGET * weekElapsedFraction
+        ? "green"
+        : cakeOrderCount >= CAKE_ORDERS_WEEKLY_TARGET * weekElapsedFraction * 0.5
+        ? "yellow"
+        : "red",
+    };
+
     const byId = (rows: any[]) => Object.fromEntries(rows.map((r: any) => [r.location_id, r]));
     const curById = byId(curSales);
     const prevById = byId(prevSales);
@@ -239,6 +300,8 @@ Deno.serve(async (req) => {
         net_sales: c.net_sales,
         order_count: c.order_count,
         average_order_value: c.average_order_value,
+        kpi_status: kpiStatus(loc.id, c.net_sales, weekElapsedFraction),
+        cake_kpi: loc.id === "L7DA0MBKD2X4P" ? cakeKpi : null,
         compare: {
           net_sales: p.net_sales,
           order_count: p.order_count,

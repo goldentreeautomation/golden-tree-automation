@@ -21,6 +21,8 @@
     --positive-text: #1a6b34;
     --negative-bg: #f3c9b6;
     --negative-text: #a13d24;
+    --warn-bg: #f4ecd6;
+    --warn-text: #8a6d1a;
     --today-fill: #17161f;
     --accent: #c5b0f4;
     --radius-card: 24px;
@@ -102,6 +104,14 @@
   .badge.up { background: var(--positive-bg); color: var(--positive-text); }
   .badge.down { background: var(--negative-bg); color: var(--negative-text); }
   .badge.flat { background: var(--hairline-soft); color: var(--stone); }
+
+  /* 주간 회의 KPI 기준선/목표 상태등 (오너 확정, 2026-09-08) */
+  .kpi-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .kpi-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: var(--radius-pill); }
+  .kpi-badge.green { background: var(--positive-bg); color: var(--positive-text); }
+  .kpi-badge.yellow { background: var(--warn-bg); color: var(--warn-text); }
+  .kpi-badge.red { background: var(--negative-bg); color: var(--negative-text); }
+  .kpi-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
   .sub-label { font-size: 12.5px; color: var(--stone); margin-top: 5px; }
   .stat-row { display: flex; gap: 10px; margin-top: 20px; }
   .stat { flex: 1; background: var(--surface-soft); border-radius: var(--radius-md); padding: 12px 14px; }
@@ -302,6 +312,20 @@ function renderCategoryPie(groups) {
     '<div class="legend">' + legend + '</div>' +
   '</div>';
 }
+const KPI_LEVEL_LABEL = { red: '삐용삐용 (기준선 미달)', yellow: '주의 (목표 미달)', green: '정상' };
+function renderKpiRow(loc) {
+  const badges = [];
+  if (loc.kpi_status) {
+    const s = loc.kpi_status;
+    badges.push('<span class="kpi-badge ' + s.level + '"><span class="kpi-dot"></span>매출 ' + KPI_LEVEL_LABEL[s.level] +
+      ' · 기준선 ' + fmtMoney(s.weekly_floor) + (s.weekly_target ? ' · 목표 ' + fmtMoney(s.weekly_target) : '') + '</span>');
+  }
+  if (loc.cake_kpi) {
+    const k = loc.cake_kpi;
+    badges.push('<span class="kpi-badge ' + k.level + '"><span class="kpi-dot"></span>홀케이크 ' + k.order_count + '/' + k.weekly_target + '건(주간 목표)</span>');
+  }
+  return badges.length ? '<div class="kpi-row">' + badges.join('') + '</div>' : '';
+}
 function renderLocation(loc) {
   return '<div class="card">' +
     '<div class="loc-name">' + loc.location_name + '</div>' +
@@ -309,6 +333,7 @@ function renderLocation(loc) {
       '<div class="net-sales">' + fmtMoney(loc.net_sales) + '</div>' +
       badgeHtml(loc.compare.net_sales_change_pct) +
     '</div>' +
+    renderKpiRow(loc) +
     '<div class="sub-label">지난주 같은 기간 ' + fmtMoney(loc.compare.net_sales) + '</div>' +
     '<div class="stat-row">' +
       '<div class="stat"><div class="label">결제건수</div><div class="value">' + loc.order_count.toLocaleString() + '건</div></div>' +
