@@ -76,8 +76,12 @@ async function rpc(fn: string, args: Record<string, unknown>, attempt = 0): Prom
   });
   if (!res.ok) {
     const text = await res.text();
-    if (res.status === 401 && text.includes("PGRST303") && attempt < 2) {
-      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+    // 이 함수는 사람이 실시간으로 기다리는 게 아니라 일요일 밤 cron이 돌리는 배치라, 일시적
+    // 오류(콜드스타트·네트워크 hiccup 등)엔 여유 있게 한 번 더 재시도한다 — 예전엔 401
+    // PGRST303 하나만 재시도했는데, 그 외 사유로 실패한 게 조용히 null로 삼켜져서 "포스팅
+    // 데이터가 없다"는 식으로 AI가 잘못 단정하는 사고가 있었다(오너 발견, 2026-09-09).
+    if (attempt < 1) {
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
       return rpc(fn, args, attempt + 1);
     }
     throw new Error(`RPC ${fn} failed: ${res.status} ${text}`);
@@ -135,12 +139,29 @@ async function buildAnomalyNote(locationId: string, locationName: string, start:
   // 지난주 포스팅 + 그 이후 최대 3일 지연효과까지 보려면 상관관계 조회 범위를 3일 더 넓힌다.
   const lookbackEnd = new Date(end + "T00:00:00Z");
   lookbackEnd.setUTCDate(lookbackEnd.getUTCDate() + 3);
-  const correlation = await rpc("analytics_dispatch", {
-    p_analysis: "social_sales_correlation",
-    p_start_date: start,
-    p_end_date: toDateStr(lookbackEnd),
-    p_location_id: locationId,
-  }).catch(() => null);
+  // rpc()가 재시도까지 실패하면 여기서 명시적으로 실패를 구분해둔다 — 예전엔 이걸 조용히
+  // null로 삼켜서, Gemini가 "포스팅이 없어서 원인을 모르겠다"는 식으로 **실제로는 포스팅이
+  // 있었는데 조회에 실패했을 뿐인 상황**을 잘못 단정해버리는 사고가 있었다(오너 발견,
+  // 2026-09-09 — 실제론 그 주 내내 매일 포스팅이 있었음). 조회 실패와 "포스팅이 진짜 없음"은
+  // 프롬프트에서 명확히 구분해서 전달해야 한다.
+  let correlation: any = null;
+  let correlationFailed = false;
+  try {
+    correlation = await rpc("analytics_dispatch", {
+      p_analysis: "social_sales_correlation",
+      p_start_date: start,
+      p_end_date: toDateStr(lookbackEnd),
+      p_location_id: locationId,
+    });
+  } catch {
+    correlationFailed = true;
+  }
+
+  const correlationSection = correlationFailed
+    ? `(포스팅-매출 상관관계 데이터를 이번엔 시스템 오류로 가져오지 못했다 — 포스팅이 없었다는
+뜻이 아니다. 이 경우 포스팅 관련 언급은 하지 말고, 일별 매출 데이터만으로 판단해라.)`
+    : `포스팅-매출 상관관계(day_offset=발행일로부터 며칠 후, 같은 요일 4주 평균과 비교):
+${JSON.stringify(correlation)}`;
 
   const prompt = `너는 ${locationName}의 주간 경영 회의용 데이터 분석가다. 아래 실제 데이터만 근거로,
 지난주(${start}~${end}) 매출에서 눈에 띄는 부분(튄 날, 침체된 날, 요일 패턴 등)과 그 이유를
@@ -157,8 +178,7 @@ async function buildAnomalyNote(locationId: string, locationName: string, start:
 일별 매출:
 ${JSON.stringify(dailySales)}
 
-포스팅-매출 상관관계(day_offset=발행일로부터 며칠 후, 같은 요일 4주 평균과 비교):
-${JSON.stringify(correlation)}`;
+${correlationSection}`;
 
   try {
     const text = await callGemini(prompt);
