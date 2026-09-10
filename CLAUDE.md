@@ -60,6 +60,15 @@ INGESTION   Square │ Meta │ Notion │ GSC │ GBP │ 영수증
 - architecture·policy·source-of-truth를 바꿀 땐 관련 문서/ADR도 같이 갱신
 - 완료 후 commit + PR 준비까지. **human 승인 없이 main merge·production 배포 금지**
 
+### Business OS로 이전 완료된 함수 (2026-09-10 production cutover) — 이 저장소에서 수정 금지
+
+`dashboard-api`·`dashboard`·`publish-web`·`external-metrics-ingest`·`market-demand-outcomes`는
+Business OS(`business-os`)가 canonical source다. 이 저장소의 해당 디렉터리(`web/*`,
+`sync/market-demand-outcomes`)는 **rollback 참조용으로만 보존**하며 각 폴더에 `MIGRATED.md`
+표시가 있다. 수정·재배포는 `business-os`에서만 한다. 상세: `business-os/docs/migration/0003-function-cutover-registry.md`.
+또한 production DB에 Business OS migration 0032(external_web_metrics idempotency)·0033
+(dashboard-api용 anon RPC grant)가 적용됨.
+
 ## 빌더 에이전트 (참고용, 미사용)
 
 `.claude/agents/`에 4개(db-architect·integration-builder·frontend-builder·verifier) 스텁 존재. 위임하지 않고 메인이 직접 처리하는 걸로 확정(오너 결정, 2026-08-25) — 소규모라 위임보다 직접 처리가 더 빠르고 투명함. 스텁은 나중에 필요해지면 참고용으로 남겨둔다.
