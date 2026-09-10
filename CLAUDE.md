@@ -62,12 +62,21 @@ INGESTION   Square │ Meta │ Notion │ GSC │ GBP │ 영수증
 
 ### Business OS로 이전 완료된 함수 (2026-09-10 production cutover) — 이 저장소에서 수정 금지
 
-`dashboard-api`·`dashboard`·`publish-web`·`external-metrics-ingest`·`market-demand-outcomes`는
-Business OS(`business-os`)가 canonical source다. 이 저장소의 해당 디렉터리(`web/*`,
-`sync/market-demand-outcomes`)는 **rollback 참조용으로만 보존**하며 각 폴더에 `MIGRATED.md`
-표시가 있다. 수정·재배포는 `business-os`에서만 한다. 상세: `business-os/docs/migration/0003-function-cutover-registry.md`.
-또한 production DB에 Business OS migration 0032(external_web_metrics idempotency)·0033
-(dashboard-api용 anon RPC grant)가 적용됨.
+**모든 canonical Edge Function이 Business OS(`business-os`)로 이전됐다.** 아래 함수는
+production에도 Business OS 버전이 배포됐고, 이 저장소의 해당 디렉터리는 **rollback
+참조용으로만 보존**한다(각 폴더 `MIGRATED.md`). 수정·재배포는 `business-os`에서만.
+
+- 1차 change window(2026-09-10): `dashboard-api`·`dashboard`·`publish-web`·
+  `external-metrics-ingest`·`market-demand-outcomes`
+- cutover program(2026-09-10): `weekly-okr-snapshot`·`market-demand`·`meta-sync`·
+  `stock-entry`·`stock-entry-api`(+신규 `stock-entry-auth`)·`discord-bot`·`square-sync`·
+  `tiktok-oauth`
+- `db-backup`: restore drill 결과에 따름 (`business-os/docs/migration/0003-function-cutover-registry.md` 참고)
+
+production DB에 적용된 Business OS migration: 0032(external_web_metrics idempotency)·
+0033(anon RPC grant)·0031(Local Growth foundation)·0034(SYNC_SHARED_SECRET Vault 래퍼).
+pg_cron 8개 job은 평문 시크릿을 걷어내고 `public.call_edge_function()`(Vault) 경유로 전환됨.
+상세: `business-os/docs/migration/0003-function-cutover-registry.md`.
 
 ## 빌더 에이전트 (참고용, 미사용)
 
